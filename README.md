@@ -113,6 +113,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 |---------------------------------------------------------------------------------------|
 | **Total**  |  **78**   |                                                              |
 └───────────────────────────────────────────────────────────────────────────────────────┘
+
 ---
 Note:APIs count may vary
 
@@ -141,7 +142,6 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 | Email (dev)           | Mailtrap sandbox                         |
 | CORS                  | django-cors-headers                      |
 └──────────────────────────────────────────────────────────────────┘
-
 ---
 
 ## 🚀 Local Setup
