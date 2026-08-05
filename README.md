@@ -94,7 +94,7 @@ __________________________________________________________
 │ (main   │         │ (images)   │        │ (rate limit  │
 │ DB)     │         │ + cache)   │        │              │
 _
----
+
 
 ## 🗂️ Module Breakdown
 
@@ -248,7 +248,7 @@ Once the server is running, visit:
 | `http://127.0.0.1:8000/api/docs/`  | Swagger UI — interactive, test endpoints directly |
 | `http://127.0.0.1:8000/api/redoc/` | Redoc — clean read-only reference                 |
 | `http://127.0.0.1:8000/admin/`     | Django admin panel                                |
-
+---
 
 ### Authentication in Swagger
 1. `POST /api/accounts/sendotp/` with your email → OTP sent to Mailtrap inbox
@@ -280,7 +280,7 @@ OK ✅
 
 ### Test coverage by module
 
-┌──────────────────────────────────────────────────────────────────────────┐
+
 |  Module  | Tests |             What's covered                            |
 |----------|-------|-------------------------------------------------------|
 | accounts |  28   | OTP flow, rate limiting, brute force, address CRUD    |
@@ -289,10 +289,8 @@ OK ✅
 | orders   |  28   | COD, Razorpay mock, cancel, stock restore, admin.     |
 | reviews  |  26   | Verified purchase, edit/delete, helpful votes.        |
 | vendors  |  60   | Registration, products, inventory, orders, dashboard  |
-└──────────────────────────────────────────────────────────────────────────┘
-Note: APIs count may vary 
-
 ---
+Note: APIs count may vary 
 
 ## 📁 Project Structure
 
