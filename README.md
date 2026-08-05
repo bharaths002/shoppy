@@ -114,6 +114,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 | **Total**  |  **78**   |                                                              |
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ---
+Note:APIs count may vary
 
 ## 🔑 User Roles
 
