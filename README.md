@@ -79,7 +79,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 
 ## 🏗️ System Architecture
 
-┌────────────────────────────────────────────────────────┐
+__________________________________________________________
 │                  API Layer (DRF)                       │
 ├────┬──────────┬──────────┬────────┬───────────┬────────┤
 │ accounts │ products │  cart   │ orders   │ vendors     │
@@ -88,12 +88,12 @@ Built from scratch with industry-standard practices — OTP-based authentication
 │   JWT    │ Search   │ + User  │ Razorpay │ Dashboard   │
 │ Addresses│ Filters  │   Cart  │ Tracking │ Inventory   │
 └──────────┴──────────┴─────────┴──────────┴─────────────┘
-     │               │                 │
-┌────┴────┐   ┌──────┴─────┐   ┌───────┴──────┐
-│ MySQL   │   │ Cloudinary │   │    Redis     │
-│ (main   │   │ (images)   │   │ (rate limit  │
-│ DB)     │   │ + cache)   │   │              │
-└─────────┘   └────────────┘   └──────────────┘
+     │                     │                      │
+┌────┴────┐         ┌──────┴─────┐        ┌───────┴──────┐
+│ MySQL   │         │ Cloudinary │        │    Redis     │
+│ (main   │         │ (images)   │        │ (rate limit  │
+│ DB)     │         │ + cache)   │        │              │
+_
 ---
 
 ## 🗂️ Module Breakdown
@@ -108,7 +108,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 | `reviews`  |    7      | Verified purchase reviews, helpful votes                     |
 | `vendors`  |   27      | Registration, products, orders, inventory, dashboard         |
 | `admin`    |   20      | Order,Review,Product CRUD, variants, images, search, filters |
-|---------------------------------------------------------------------------------------|
+|            |           |                                                              |
 | **Total**  |  **78**   |                                                              |
 
 ---
@@ -243,13 +243,11 @@ python manage.py runserver
 ## 📖 API Documentation
 
 Once the server is running, visit:
-┌────────────────────────────────────────────────────────────────────────────────────────┐
 |               URL                  |                Description                        |              
 |------------------------------------|---------------------------------------------------|
 | `http://127.0.0.1:8000/api/docs/`  | Swagger UI — interactive, test endpoints directly |
 | `http://127.0.0.1:8000/api/redoc/` | Redoc — clean read-only reference                 |
 | `http://127.0.0.1:8000/admin/`     | Django admin panel                                |
-└────────────────────────────────────────────────────────────────────────────────────────┘
 
 
 ### Authentication in Swagger
