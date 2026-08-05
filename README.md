@@ -79,38 +79,40 @@ Built from scratch with industry-standard practices — OTP-based authentication
 
 ## 🏗️ System Architecture
 
-┌─────────────────────────────────────────────────────────┐
-│ API Layer (DRF) │
-├──────────┬──────────┬────────┬──────────┬───────────────┤
-│ accounts │ products │ cart │ orders │ vendors │
-│ │ │ │ │ │
-│ OTP Auth │ CRUD + │ Guest │ COD + │ Registration │
-│ JWT │ Search │ + User │ Razorpay │ Dashboard │
-│ Addresses│ Filters │ Cart │ Tracking │ Inventory │
-└──────────┴──────────┴────────┴──────────┴───────────────┘
-│ │ │
-┌────┴────┐ ┌──────┴─────┐ ┌───────┴──────┐
-│ MySQL │ │ Cloudinary │ │ Redis │
-│ (main │ │ (images) │ │ (rate limit │
-│ DB) │ │ │ │ + cache) │
-└─────────┘ └─────────────┘ └──────────────┘
+┌────────────────────────────────────────────────────────┐
+│                  API Layer (DRF)                       │
+├────┬──────────┬──────────┬────────┬───────────┬────────┤
+│ accounts │ products │  cart   │ orders   │ vendors     │
+│    │     │     │    │    │    │    │     │    │        │
+│ OTP Auth │ CRUD +   │  Guest  │  COD +   │ Registration│
+│   JWT    │ Search   │ + User  │ Razorpay │ Dashboard   │
+│ Addresses│ Filters  │   Cart  │ Tracking │ Inventory   │
+└──────────┴──────────┴─────────┴──────────┴─────────────┘
+     │               │                 │
+┌────┴────┐   ┌──────┴─────┐   ┌───────┴──────┐
+│ MySQL   │   │ Cloudinary │   │    Redis     │
+│ (main   │   │ (images)   │   │ (rate limit  │
+│ DB)     │   │ + cache)   │   │              │
+└─────────┘   └────────────┘   └──────────────┘
 
 
 ---
 
 ## 🗂️ Module Breakdown
 
-| Module | Endpoints | Description |
-|--------|-----------|-------------|
-| `accounts` | 10 | OTP auth, JWT login, address management |
-| `products` | 4 | Public product browsing and search |
-| `cart` | 5 | Add/update/remove items, guest cart, merge on login |
-| `orders` | 5 | Place orders, Razorpay integration, status tracking |
-| `reviews` | 7 | Verified purchase reviews, helpful votes |
-| `vendors` | 27 | Registration, products, orders, inventory, dashboard |
-| `admin` | 20 | Order,Review,Product CRUD, variants, images, search, filters |
-| **Total** | **78** | |
-
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+|   Module   | Endpoints | Description                                                  |
+|------------|-----------|--------------------------------------------------------------|
+| `accounts` |   10      | OTP auth, JWT login, address management                      |
+| `products` |    4      | Public product browsing and search                           |
+| `cart`     |    5      | Add/update/remove items, guest cart, merge on login          |
+| `orders`   |    5      | Place orders, Razorpay integration, status tracking          |
+| `reviews`  |    7      | Verified purchase reviews, helpful votes                     |
+| `vendors`  |   27      | Registration, products, orders, inventory, dashboard         |
+| `admin`    |   20      | Order,Review,Product CRUD, variants, images, search, filters |
+|---------------------------------------------------------------------------------------|
+| **Total**  |  **78**   |                                                              |
+└───────────────────────────────────────────────────────────────────────────────────────┘
 ---
 
 ## 🔑 User Roles
@@ -124,18 +126,20 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 
 ## 🧰 Tech Stack
 
-| Category | Technology |
-|----------|------------|
-| Language | Python 3.11 |
-| Framework | Django 4.2, Django REST Framework 3.17 |
-| Database | MySQL 9.6 |
-| Cache / Rate Limiting | Redis 7.4 via django-redis |
-| Authentication | JWT via djangorestframework-simplejwt |
-| Image Storage | Cloudinary via django-cloudinary-storage |
-| Payments | Razorpay (test mode) |
-| API Documentation | drf-spectacular (Swagger UI + Redoc) |
-| Email (dev) | Mailtrap sandbox |
-| CORS | django-cors-headers |
+┌──────────────────────────────────────────────────────────────────┐
+| Category              | Technology                               |
+|-----------------------|------------------------------------------|
+| Language              | Python 3.11                              |
+| Framework             | Django 4.2, Django REST Framework 3.17   |
+| Database              | MySQL 9.6                                |
+| Cache / Rate Limiting | Redis 7.4 via django-redis               |
+| Authentication        | JWT via djangorestframework-simplejwt    |
+| Image Storage         | Cloudinary via django-cloudinary-storage |
+| Payments              | Razorpay (test mode)                     |
+| API Documentation     | drf-spectacular (Swagger UI + Redoc)     |
+| Email (dev)           | Mailtrap sandbox                         |
+| CORS                  | django-cors-headers                      |
+└──────────────────────────────────────────────────────────────────┘
 
 ---
 
@@ -243,12 +247,14 @@ python manage.py runserver
 ## 📖 API Documentation
 
 Once the server is running, visit:
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+|               URL                  |                Description                        |              
+|------------------------------------|---------------------------------------------------|
+| `http://127.0.0.1:8000/api/docs/`  | Swagger UI — interactive, test endpoints directly |
+| `http://127.0.0.1:8000/api/redoc/` | Redoc — clean read-only reference                 |
+| `http://127.0.0.1:8000/admin/`     | Django admin panel                                |
+└────────────────────────────────────────────────────────────────────────────────────────┘
 
-| URL | Description |
-|-----|-------------|
-| `http://127.0.0.1:8000/api/docs/` | Swagger UI — interactive, test endpoints directly |
-| `http://127.0.0.1:8000/api/redoc/` | Redoc — clean read-only reference |
-| `http://127.0.0.1:8000/admin/` | Django admin panel |
 
 ### Authentication in Swagger
 1. `POST /api/accounts/sendotp/` with your email → OTP sent to Mailtrap inbox
@@ -280,14 +286,17 @@ OK ✅
 
 ### Test coverage by module
 
-| Module | Tests | What's covered |
-|--------|-------|----------------|
-| accounts | 28 | OTP flow, rate limiting, brute force, address CRUD |
-| products | 24 | Listing, search, filters, CRUD, permissions |
-| cart | 35 | Add/update/remove, guest cart, stock validation |
-| orders | 28 | COD, Razorpay mock, cancel, stock restore, admin |
-| reviews | 26 | Verified purchase, edit/delete, helpful votes |
-| vendors | 60 | Registration, products, inventory, orders, dashboard |
+┌──────────────────────────────────────────────────────────────────────────┐
+|  Module  | Tests |             What's covered                            |
+|----------|-------|-------------------------------------------------------|
+| accounts |  28   | OTP flow, rate limiting, brute force, address CRUD    |
+| products |  24   | Listing, search, filters, CRUD, permissions           |
+| cart     |  35   | Add/update/remove, guest cart, stock validation       |
+| orders   |  28   | COD, Razorpay mock, cancel, stock restore, admin.     |
+| reviews  |  26   | Verified purchase, edit/delete, helpful votes.        |
+| vendors  |  60   | Registration, products, inventory, orders, dashboard  |
+└──────────────────────────────────────────────────────────────────────────┘
+Note: APIs count may vary 
 
 ---
 
