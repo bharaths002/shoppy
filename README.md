@@ -94,8 +94,6 @@ Built from scratch with industry-standard practices — OTP-based authentication
 │ (main   │   │ (images)   │   │ (rate limit  │
 │ DB)     │   │ + cache)   │   │              │
 └─────────┘   └────────────┘   └──────────────┘
-
-
 ---
 
 ## 🗂️ Module Breakdown
@@ -113,7 +111,6 @@ Built from scratch with industry-standard practices — OTP-based authentication
 |---------------------------------------------------------------------------------------|
 | **Total**  |  **78**   |                                                              |
 └───────────────────────────────────────────────────────────────────────────────────────┘
-
 ---
 Note:APIs count may vary
 
@@ -124,10 +121,9 @@ Customer → browse products, manage cart, place orders, write reviews
 Vendor → register shop, manage own products, view own orders, manage inventory
 Admin → approve vendors, manage all products, update order statuses, moderate reviews
 
+
 ---
-
 ## 🧰 Tech Stack
-
 ┌──────────────────────────────────────────────────────────────────┐
 | Category              | Technology                               |
 |-----------------------|------------------------------------------|
