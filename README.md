@@ -98,7 +98,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 
 ## 🗂️ Module Breakdown
 
-┌───────────────────────────────────────────────────────────────────────────────────────┐
+
 |   Module   | Endpoints | Description                                                  |
 |------------|-----------|--------------------------------------------------------------|
 | `accounts` |   10      | OTP auth, JWT login, address management                      |
@@ -110,7 +110,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 | `admin`    |   20      | Order,Review,Product CRUD, variants, images, search, filters |
 |---------------------------------------------------------------------------------------|
 | **Total**  |  **78**   |                                                              |
-└───────────────────────────────────────────────────────────────────────────────────────┘
+
 ---
 Note:APIs count may vary
 
@@ -124,7 +124,7 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 
 ---
 ## 🧰 Tech Stack
-┌──────────────────────────────────────────────────────────────────┐
+
 | Category              | Technology                               |
 |-----------------------|------------------------------------------|
 | Language              | Python 3.11                              |
@@ -137,7 +137,6 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 | API Documentation     | drf-spectacular (Swagger UI + Redoc)     |
 | Email (dev)           | Mailtrap sandbox                         |
 | CORS                  | django-cors-headers                      |
-└──────────────────────────────────────────────────────────────────┘
 ---
 
 ## 🚀 Local Setup
