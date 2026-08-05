@@ -125,12 +125,45 @@ REST_FRAMEWORK = {
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Shoppy API',
-    'DESCRIPTION': 'Full ecommerce backend API — Accounts, Products, Cart, Orders',
+    'DESCRIPTION': '''
+## Shoppy — Multivendor Ecommerce API
+
+Full-featured ecommerce backend with multivendor support.
+
+### Authentication
+All protected endpoints require a Bearer JWT token.
+1. POST /api/accounts/sendotp/ → get OTP on email
+2. POST /api/accounts/verifyotp/ → get access + refresh tokens
+3. Add header: Authorization: Bearer <access_token>
+
+### User Roles
+- customer → can browse, cart, order, review
+- vendor → can manage own products, view own orders
+- admin → full access to everything
+    ''',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SWAGGER_UI_SETTINGS': {
-        'persistAuthorization': True,  # ✅ keeps your JWT token saved between page refreshes
+        'persistAuthorization': True,
+        'displayRequestDuration': True,
+        'filter': True,
     },
+    'TAGS': [
+        {'name': 'Authentication', 'description': 'OTP login, password, token refresh'},
+        {'name': 'Addresses', 'description': 'Shipping and billing address management'},
+        {'name': 'Products', 'description': 'Public product browsing and search'},
+        {'name': 'Products — Admin', 'description': 'Admin product CRUD (requires admin token)'},
+        {'name': 'Cart', 'description': 'Cart management for guests and logged-in users'},
+        {'name': 'Orders', 'description': 'Order placement and tracking'},
+        {'name': 'Reviews', 'description': 'Product reviews from verified buyers'},
+        {'name': 'Vendor — Auth', 'description': 'Vendor registration and profile'},
+        {'name': 'Vendor — Products', 'description': 'Vendor product management'},
+        {'name': 'Vendor — Orders', 'description': 'Vendor order visibility'},
+        {'name': 'Vendor — Inventory', 'description': 'Vendor stock management'},
+        {'name': 'Vendor — Dashboard', 'description': 'Vendor revenue and analytics'},
+        {'name': 'Admin — Orders', 'description': 'Admin order management'},
+        {'name': 'Admin — Reviews', 'description': 'Admin review moderation'},
+    ],
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

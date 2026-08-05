@@ -505,7 +505,7 @@ class GuestCartTests(CartTestBase):
         # Simulate session
         session = self.client.session
         session.save()
-        session_key = session.session_key
+        session.session_key
 
         # Create a mock request with session
         from django.test import RequestFactory
