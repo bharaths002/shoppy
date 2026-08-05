@@ -9,7 +9,7 @@ from products.models import (
 )
 from accounts.models import Address
 from cart.models import Cart, CartItem
-from orders.models import Order, OrderItem, OrderStatusHistory
+from orders.models import Order,OrderStatusHistory
 
 User = get_user_model()
 
