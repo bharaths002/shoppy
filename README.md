@@ -79,21 +79,22 @@ Built from scratch with industry-standard practices — OTP-based authentication
 
 ## 🏗️ System Architecture
 
-__________________________________________________________
-│                  API Layer (DRF)                       │
-├────┬──────────┬──────────┬────────┬───────────┬────────┤
-│ accounts │ products │  cart   │ orders   │ vendors     │
-│    │     │     │    │    │    │    │     │    │        │
-│ OTP Auth │ CRUD +   │  Guest  │  COD +   │ Registration│
-│   JWT    │ Search   │ + User  │ Razorpay │ Dashboard   │
-│ Addresses│ Filters  │   Cart  │ Tracking │ Inventory   │
-└──────────┴──────────┴─────────┴──────────┴─────────────┘
-     │                     │                      │
-┌────┴────┐         ┌──────┴─────┐        ┌───────┴──────┐
-│ MySQL   │         │ Cloudinary │        │    Redis     │
-│ (main   │         │ (images)   │        │ (rate limit  │
-│ DB)     │         │ + cache)   │        │              │
-_
+```text
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           API Layer (Django REST Framework)                   │
+├─────────────┬─────────────┬────────────┬──────────────┬───────────────────────┤
+│ Accounts    │ Products    │ Cart       │ Orders       │ Vendors               │
+├─────────────┼─────────────┼────────────┼──────────────┼───────────────────────┤
+│ OTP Auth    │ CRUD        │ Guest Cart │ COD          │ Registration          │
+│ JWT Auth    │ Search      │ User Cart  │ Razorpay     │ Dashboard             │
+│ Addresses   │ Filters     │            │ Tracking     │ Inventory             │
+└─────────────┴─────────────┴────────────┴──────────────┴───────────────────────┘
+                │                    │                       │
+      ┌─────────┴────────┐  ┌────────┴────────┐   ┌──────────┴─────────┐
+      │ MySQL            │  │ Cloudinary      │   │ Redis              │
+      │ Main Database    │  │ Image Storage   │   │ Rate Limiting      │
+      └──────────────────┘  └─────────────────┘   └────────────────────┘
+```
 
 
 ## 🗂️ Module Breakdown
