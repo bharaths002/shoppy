@@ -331,18 +331,23 @@ shoppy/
 Eliminates forgotten password flows, reduces support overhead, and matches how most Indian ecommerce apps work (Swiggy, Zepto, Blinkit all use OTP login).
 
 **Why reuse the same authentication flow?**
+
 The same OTP + JWT authentication logic is reused across customers and vendors to avoid duplicating authentication code. Vendors additionally require **admin approval** before they can log in and access vendor features. Admin authentication uses Django's built-in **superuser** system.
 
 **Why soft delete products?**
+
 Hard deleting a product would break existing orders, cart items, and reviews that reference it. Soft delete keeps data integrity intact while hiding the product from customers.
 
 **Why snapshot product data in OrderItem?**
+
 If a vendor changes a product's name or price after a customer has ordered, the order must still show what the customer actually saw and paid. Snapshot fields (`product_name`, `unit_price`) ensure this.
 
 **Why deduct stock at order creation not payment?**
+
 Deducting at payment time (after Razorpay callback) creates a window where two customers can both "successfully" checkout the last unit. Deducting at order creation prevents overselling.
 
 **Why vendor commission snapshotted per OrderItem?**
+
 Admin might change a vendor's commission rate in the future. Past orders should reflect the commission that was in effect at the time — not the current rate.
 
 ---
