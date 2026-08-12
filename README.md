@@ -329,6 +329,9 @@ shoppy/
 **Why OTP instead of password for customers?**
 Eliminates forgotten password flows, reduces support overhead, and matches how most Indian ecommerce apps work (Swiggy, Zepto, Blinkit all use OTP login).
 
+**Why reuse the same authentication flow?**
+The same OTP + JWT authentication logic is reused across customers and vendors to avoid duplicating authentication code. Vendors additionally require **admin approval** before they can log in and access vendor features. Admin authentication uses Django's built-in **superuser** system.
+
 **Why soft delete products?**
 Hard deleting a product would break existing orders, cart items, and reviews that reference it. Soft delete keeps data integrity intact while hiding the product from customers.
 
