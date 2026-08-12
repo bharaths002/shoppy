@@ -308,8 +308,6 @@ shoppy/
 ├── .env               # Not committed — see setup above
 └── manage.py
 ```
-
-
 ---
 
 ## 🔒 Security Highlights
