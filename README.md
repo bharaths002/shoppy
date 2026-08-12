@@ -295,18 +295,19 @@ Note: APIs count may vary
 
 ## 📁 Project Structure
 
+``text
 shoppy/
-├── accounts/ # User auth, OTP, addresses, vendor profiles
-├── products/ # Products, categories, brands, variants, images
-├── cart/ # Cart items, guest cart, merge logic
-├── orders/ # Orders, payments, status history
-├── reviews/ # Reviews, helpful votes
-├── vendors/ # Vendor dashboard, products, inventory, orders
-├── config/ # Django settings, root URLs
+├── accounts/          # User auth, OTP, addresses, vendor profiles
+├── products/          # Products, categories, brands, variants, images
+├── cart/              # Cart items, guest cart, merge logic
+├── orders/            # Orders, payments, status history
+├── reviews/           # Reviews, helpful votes
+├── vendors/           # Vendor dashboard, products, inventory, orders
+├── config/            # Django settings, root URLs
 ├── requirements.txt
-├── .env # Not committed — see setup above
+├── .env               # Not committed — see setup above
 └── manage.py
-
+```
 
 
 ---
