@@ -327,6 +327,7 @@ shoppy/
 ## 💡 Design Decisions Worth Noting
 
 **Why OTP instead of password for customers?**
+
 Eliminates forgotten password flows, reduces support overhead, and matches how most Indian ecommerce apps work (Swiggy, Zepto, Blinkit all use OTP login).
 
 **Why reuse the same authentication flow?**
