@@ -2,7 +2,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from accounts.models import VendorProfile, OTP
+from accounts.models import VendorProfile, OTP 
 from products.models import (
     Product, Category, Brand,
     ProductVariant, AttributeType, VariantAttribute
@@ -97,7 +97,7 @@ class VendorTestBase(TestCase):
             vendor=self.vendor_profile
         )
         self.vendor_variant = ProductVariant.objects.create(
-            product=self.vendor_product,
+            product=self.vendor_product,    
             stock=20,
             price=5000
         )

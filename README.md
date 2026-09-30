@@ -5,6 +5,7 @@
 ![DRF](https://img.shields.io/badge/DRF-3.17-red?logo=django)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-blue?logo=mysql)
 ![Redis](https://img.shields.io/badge/Redis-7.4-red?logo=redis)
+![Docker](https://img.shields.io/badge/Docker-Containerized-blue?logo=docker)
 ![JWT](https://img.shields.io/badge/Auth-JWT-orange)
 ![Tests](https://img.shields.io/badge/Tests-201%20passing-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
@@ -92,9 +93,13 @@ Built from scratch with industry-standard practices — OTP-based authentication
                 │                    │                       │
       ┌─────────┴────────┐  ┌────────┴────────┐   ┌──────────┴─────────┐
       │ MySQL            │  │ Cloudinary      │   │ Redis              │
-      │ Main Database    │  │ Image Storage   │   │ Rate Limiting      │
+      │ Main Database    │  │ Image Storage   │   │ Rate Limiting +    │
+      │                  │  │                 │   │ Cache              │
       └──────────────────┘  └─────────────────┘   └────────────────────┘
+
+🐳 All services (Django + MySQL + Redis) run inside Docker containers
 ```
+
 
 
 ## 🗂️ Module Breakdown
@@ -113,7 +118,7 @@ Built from scratch with industry-standard practices — OTP-based authentication
 | **Total**  |  **78**   |                                                              |
 
 ---
-Note:APIs count may vary
+> API count may vary slightly depending on HTTP method combinations per endpoint.
 
 ## 🔑 User Roles
 
@@ -130,7 +135,7 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 |-----------------------|------------------------------------------|
 | Language              | Python 3.11                              |
 | Framework             | Django 4.2, Django REST Framework 3.17   |
-| Database              | MySQL 9.6                                |
+| Database              | MySQL 9.6.0                                |
 | Cache / Rate Limiting | Redis 7.4 via django-redis               |
 | Authentication        | JWT via djangorestframework-simplejwt    |
 | Image Storage         | Cloudinary via django-cloudinary-storage |
@@ -138,9 +143,126 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 | API Documentation     | drf-spectacular (Swagger UI + Redoc)     |
 | Email (dev)           | Mailtrap sandbox                         |
 | CORS                  | django-cors-headers                      |
+| Containerization      | Docker, Docker Compose                   |
 ---
 
 ## 🚀 Local Setup
+
+There are **two ways** to run this project. Docker is recommended as it requires no manual installation of MySQL or Redis.
+
+---
+
+### 🐳 Option 1 — Docker Setup (Recommended)
+
+Everything runs in containers. No need to install MySQL or Redis locally.
+
+#### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- A free [Cloudinary](https://cloudinary.com) account
+- A free [Mailtrap](https://mailtrap.io) account
+- A free [Razorpay](https://razorpay.com) account (test mode keys)
+
+#### 1. Clone the repository
+
+```bash
+git clone https://github.com/bharaths002/shoppy.git
+cd shoppy
+```
+
+#### 2. Create your `.env` file
+
+Copy the example file and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your actual values:
+
+```env
+SECRET_KEY=your-django-secret-key-here
+
+# Database — used by Docker internally, no change needed
+DB_NAME=shoppy
+DB_USER=shoppy_user
+DB_PASSWORD=shoppy_password
+DB_HOST=db
+DB_PORT=3306
+
+# Redis — points to the Redis container
+REDIS_URL=redis://redis:6379/1
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+
+# Mailtrap
+EMAIL_HOST_USER=your-mailtrap-username
+EMAIL_HOST_PASSWORD=your-mailtrap-password
+
+# Razorpay (test mode)
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=your-razorpay-secret
+```
+
+#### 3. Build and start all containers
+
+```bash
+docker-compose up --build
+```
+
+This starts three containers:
+- `web` — Django application on port 8000
+- `db` — MySQL 8.0 database
+- `redis` — Redis 7.4 cache and rate limiting
+
+Migrations run automatically on startup. First build takes 3–5 minutes.
+
+#### 4. Create a superuser (in a new terminal)
+
+```bash
+docker-compose exec web python manage.py createsuperuser
+```
+
+#### 5. Visit the app
+
+http://127.0.0.1:8000/api/docs/ → Swagger UI
+http://127.0.0.1:8000/admin/ → Django admin panel
+
+
+#### Useful Docker Commands
+
+```bash
+# Start in background
+docker-compose up -d --build
+
+# View logs
+docker-compose logs web
+docker-compose logs db
+docker-compose logs redis
+
+# Run tests inside container
+docker-compose exec web python manage.py test --verbosity=2
+
+# Run migrations manually
+docker-compose exec web python manage.py migrate
+
+# Open a shell inside the web container
+docker-compose exec web bash
+
+# Stop all containers
+docker-compose down
+
+# Stop and delete all data (fresh start)
+docker-compose down -v
+
+# Rebuild after changing requirements.txt
+docker-compose up --build
+```
+
+---
+
 
 ### Prerequisites
 - Python 3.11+
@@ -151,6 +273,10 @@ Admin → approve vendors, manage all products, update order statuses, moderate 
 - A free [Razorpay](https://razorpay.com) account (test mode keys)
 
 ---
+
+### 💻 Option 2 — Manual Setup (Without Docker)
+
+Use this if you prefer running services directly on your machine.
 
 ### 1. Clone the repository
 
@@ -260,12 +386,18 @@ Once the server is running, visit:
 ---
 
 ## 🧪 Running Tests
-✔ 201 automated test cases covering authentication,
-cart, orders, vendors, reviews, permissions and
-business logic.
+
+✔ 201 automated test cases covering authentication, cart, orders, vendors, reviews, permissions and business logic.
+
+**With Docker:**
 ```bash
-# Run all 201 Automated Test Cases
+docker-compose exec web python manage.py test --verbosity=2
+```
+
+**Without Docker:**
+```bash
 python manage.py test --verbosity=2
+```
 
 # Run by module
 python manage.py test accounts --verbosity=2
@@ -305,8 +437,11 @@ shoppy/
 ├── reviews/ # Reviews, helpful votes
 ├── vendors/ # Vendor dashboard, products, inventory, orders
 ├── config/ # Django settings, root URLs
-├── requirements.txt
-├── .env # Not committed — see setup above
+├── Dockerfile # Docker image definition for Django app
+├── docker-compose.yml # Orchestrates web + db + redis containers
+├── requirements.txt # Python dependencies
+├── .env.example # Environment variable template
+├── .env # Not committed — copy from .env.example
 └── manage.py
 
 
@@ -341,6 +476,9 @@ Deducting at payment time (after Razorpay callback) creates a window where two c
 
 **Why vendor commission snapshotted per OrderItem?**
 Admin might change a vendor's commission rate in the future. Past orders should reflect the commission that was in effect at the time — not the current rate.
+
+**Why Docker?**
+Eliminates the "works on my machine" problem. MySQL and Redis run as containers alongside Django, so anyone can clone and run the entire project with a single command regardless of their operating system or locally installed software.
 
 ---
 
