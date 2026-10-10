@@ -98,11 +98,6 @@ Built from scratch with industry-standard practices — OTP-based authentication
       └──────────────────┘  └─────────────────┘   └────────────────────┘
 
 🐳 All services (Django + MySQL + Redis) run inside Docker containers
-```
-
-      │ Main Database    │  │ Image Storage   │   │ Rate Limiting      │
-      └──────────────────┘  └─────────────────┘   └────────────────────┘
-```
 
 
 ## 🗂️ Module Breakdown
@@ -122,7 +117,6 @@ Built from scratch with industry-standard practices — OTP-based authentication
 
 ---
 > API count may vary slightly depending on HTTP method combinations per endpoint.
-Note:APIs count may vary
 
 ## 🔑 User Roles
 
