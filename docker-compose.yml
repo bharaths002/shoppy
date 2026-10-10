@@ -1,0 +1,104 @@
+# Docker Compose version
+version: '3.9'
+
+services:
+
+  # ── Service 1: MySQL Database ──────────────────────────────
+  db:
+    # Use official MySQL 8.0 image from Docker Hub
+    # No Dockerfile needed — Docker pulls this image automatically
+    image: mysql:8.0
+
+    # Always restart if it crashes
+    restart: always
+
+    # Environment variables MySQL needs to set itself up
+    # These create the database and user on first run
+    environment:
+      MYSQL_DATABASE: shoppy
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_USER: shoppy_user
+      MYSQL_PASSWORD: shoppy_password
+
+    # Volume — persists MySQL data even when container stops
+    # Without this, all your data is lost every time you restart
+    # shoppy_mysql_data is a named volume defined at the bottom
+    volumes:
+      - shoppy_mysql_data:/var/lib/mysql
+
+    # Health check — lets other containers know when MySQL is
+    # actually ready to accept connections (not just started)
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Service 2: Redis ───────────────────────────────────────
+  redis:
+    # Use official Redis 7.4 image from Docker Hub
+    image: redis:7.4-alpine
+
+    # alpine = even smaller image (alpine linux base)
+    restart: always
+
+    # Health check — lets Django know Redis is ready
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Service 3: Django App ──────────────────────────────────
+  web:
+    # Build from your Dockerfile (not a pre-made image)
+    # . means look for Dockerfile in the current directory
+    build: .
+
+    # Run migrations then start the server
+    # wait-for-it alternative — command: handles startup order
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+
+    # Mount your code as a volume
+    # Changes you make on your Mac instantly reflect inside container
+    # You don't need to rebuild the image every time you change code
+    volumes:
+      - .:/app
+
+    # Map port 8000 on your Mac to port 8000 inside the container
+    # Format is host_port:container_port
+    # This is why http://127.0.0.1:8000 still works as before
+    ports:
+      - "8000:8000"
+
+    # Pass your .env file into the container
+    # All your SECRET_KEY, DB_*, CLOUDINARY_* etc. are loaded here
+    env_file:
+      - .env
+
+    # Extra environment variables that override .env
+    # These tell Django to use container names instead of localhost
+    environment:
+      - DB_HOST=db
+      - DB_USER=shoppy_user
+      - DB_PASSWORD=shoppy_password
+      - DB_NAME=shoppy
+      - DB_PORT=3306
+      - REDIS_URL=redis://redis:6379/1
+
+    # web container waits for db and redis to be healthy
+    # before it starts — prevents "can't connect to MySQL" errors
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+# ── Named Volumes ──────────────────────────────────────────────
+# Declare the volume used by the db service above
+# Docker manages this volume outside your project folder
+# Data survives docker-compose down but is deleted with docker-compose down -v
+volumes:
+  shoppy_mysql_data:
