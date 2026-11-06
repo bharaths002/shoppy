@@ -64,21 +64,18 @@ class VendorProfileAdmin(admin.ModelAdmin):
     actions = ['approve_vendors', 'reject_vendors', 'suspend_vendors']
 
     def approve_vendors(self, request, queryset):
-        """
-        Admin selects one or more pending vendors and clicks approve.
-        Updates status, sets is_active=True, records who approved and when.
-        """
-        updated = queryset.filter(status='pending').update(
-            status='approved',
-            is_active=True,
-            approved_at=timezone.now(),
-            approved_by=request.user
-        )
-        # Update the user role to vendor
-        for vendor in queryset:
-            vendor.user.role = 'vendor'
-            vendor.user.save()
-        self.message_user(request, f"{updated} vendor(s) approved successfully.")
+        count = 0
+        for vendor in queryset.filter(status='pending').select_related('user'):
+            vendor.status = 'approved'
+            vendor.is_active = True
+            vendor.approved_at = timezone.now()
+            vendor.approved_by = request.user
+            vendor.save()
+            if vendor.user.role != 'vendor':
+                vendor.user.role = 'vendor'
+                vendor.user.save(update_fields=['role'])
+            count += 1
+        self.message_user(request, f"{count} vendor(s) approved successfully.")
     approve_vendors.short_description = "✅ Approve selected vendors"
 
     def reject_vendors(self, request, queryset):
@@ -102,3 +99,16 @@ class VendorProfileAdmin(admin.ModelAdmin):
         )
         self.message_user(request, f"{updated} vendor(s) suspended.")
     suspend_vendors.short_description = "⛔ Suspend selected vendors"
+
+    def save_model(self, request, obj, form, change):
+        # Approval from the detail page: set the approval metadata
+        if change and 'status' in form.changed_data and obj.status == 'approved':
+            obj.is_active = True
+            obj.approved_at = timezone.now()
+            obj.approved_by = request.user
+        super().save_model(request, obj, form, change)
+
+        # Promote the user's role once approved
+        if obj.status == 'approved' and obj.user.role != 'vendor':
+            obj.user.role = 'vendor'
+            obj.user.save(update_fields=['role'])

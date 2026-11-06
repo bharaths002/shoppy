@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Address
-
+from accounts.models import User
 
 class SendOTPSerializer(serializers.Serializer):
     contact = serializers.CharField()
@@ -20,6 +20,18 @@ class AddressSerializer(serializers.ModelSerializer):
             'address_type', 'is_default', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+class MeSerializer(serializers.ModelSerializer):
+    has_password = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'phone_number', 'username', 'first_name',
+                  'last_name', 'role', 'is_verified', 'has_password']
+        read_only_fields = ['id', 'email', 'phone_number', 'username', 'role', 'is_verified']
+
+    def get_has_password(self, obj):
+        return obj.has_usable_password()
 
 
 class CreateAddressSerializer(serializers.ModelSerializer):

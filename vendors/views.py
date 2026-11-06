@@ -17,7 +17,7 @@ from products.serializers import (
     ProductCreateSerializer, ProductVariantCreateSerializer
 )
 from .serializers import (
-    VendorRegistrationSerializer,
+    VendorRegistrationSerializer, VendorApplicationSerializer,
     VendorProfileSerializer,
     UpdateVendorProfileSerializer,ProductInventorySerializer
 )
@@ -32,19 +32,11 @@ from orders.serializers import (
 
 
 
-
 def get_user_role_data(user):
-    """
-    Helper — returns role and vendor status for login responses.
-    Reused in both customer and vendor login flows.
-    """
-    role_data = {
-        "role": user.role,
-        "vendor_profile": None
-    }
+    role_data = {"role": user.role, "vendor_profile": None}
 
-    if user.role == 'vendor' and hasattr(user, 'vendor_profile'):
-        vp = user.vendor_profile
+    vp = getattr(user, 'vendor_profile', None)
+    if vp:
         role_data["vendor_profile"] = {
             "shop_name": vp.shop_name,
             "shop_slug": vp.shop_slug,
@@ -55,10 +47,29 @@ def get_user_role_data(user):
 
     if user.is_superuser or user.is_staff:
         role_data["role"] = "admin"
-
     return role_data
 
+def notify_admin_new_vendor(vendor_profile):
+    try:
+        send_mail(
+            subject="New Vendor Registration — Pending Approval",
+            message=f"""
+A new vendor has applied and is awaiting approval.
 
+Shop Name: {vendor_profile.shop_name}
+Email: {vendor_profile.user.email}
+Business Type: {vendor_profile.business_type}
+GSTIN: {vendor_profile.gstin or 'Not provided'}
+
+Please login to the admin panel to review and approve:
+http://127.0.0.1:8000/admin/accounts/vendorprofile/
+            """,
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[settings.EMAIL_HOST_USER],
+            fail_silently=True,
+        )
+    except Exception:
+        pass  # never block the application if email fails
 class VendorRegisterView(APIView):
     """
     POST /api/vendors/register/
@@ -188,26 +199,7 @@ class VendorRegisterView(APIView):
         )
 
         # ── Notify admin via email ────────────────────────────
-        try:
-            send_mail(
-                subject="New Vendor Registration — Pending Approval",
-                message=f"""
-A new vendor has registered and is awaiting approval.
-
-Shop Name: {vendor_profile.shop_name}
-Email: {email}
-Business Type: {vendor_profile.business_type}
-GSTIN: {vendor_profile.gstin or 'Not provided'}
-
-Please login to the admin panel to review and approve:
-http://127.0.0.1:8000/admin/accounts/vendorprofile/
-                """,
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[settings.EMAIL_HOST_USER],
-                fail_silently=True
-            )
-        except Exception:
-            pass  # Don't block registration if email fails
+        notify_admin_new_vendor(vendor_profile)
 
         # ── Generate JWT tokens ───────────────────────────────
         refresh = RefreshToken.for_user(user)
@@ -223,7 +215,41 @@ http://127.0.0.1:8000/admin/accounts/vendorprofile/
             status=status.HTTP_201_CREATED
         )
 
+class VendorApplyView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Apply to become a vendor (logged-in users)",
+        request=VendorApplicationSerializer,
+        responses={201: VendorProfileSerializer},
+        tags=["Vendor — Auth"]
+    )
+    def post(self, request):
+        user = request.user
+        profile = getattr(user, 'vendor_profile', None)
+
+        # Only a rejected application can be resubmitted
+        if profile and profile.status != 'rejected':
+            return Response(
+                {"error": f"You already have a {profile.status} vendor application."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VendorApplicationSerializer(profile, data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        profile = serializer.save(
+            user=user, status='pending', rejection_reason='', is_active=False
+        )
+        notify_admin_new_vendor(profile)   # move your existing send_mail block into this helper
+
+        return Response(
+            {"message": "Application submitted. You'll be notified once reviewed.",
+             "vendor_profile": VendorProfileSerializer(profile).data},
+            status=status.HTTP_201_CREATED
+        )
+    
 class VendorProfileView(APIView):
     """
     GET   /api/vendors/profile/   → view own vendor profile

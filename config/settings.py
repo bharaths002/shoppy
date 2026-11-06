@@ -1,7 +1,7 @@
 
 
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 from datetime import timedelta
 
 import os
@@ -74,15 +74,19 @@ SIMPLE_JWT = {
 CACHES = {
     "default": { 
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": config('REDIS_URL', default='redis://127.0.0.1:6379/1'),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
     }
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
-
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:5173',
+    cast=Csv()
+)
+CORS_ALLOW_CREDENTIALS = True
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
@@ -152,6 +156,8 @@ All protected endpoints require a Bearer JWT token.
         {'name': 'Authentication', 'description': 'OTP login, password, token refresh'},
         {'name': 'Addresses', 'description': 'Shipping and billing address management'},
         {'name': 'Products', 'description': 'Public product browsing and search'},
+        {'name': 'Accounts', 'description': 'Account details for the logged-in user'},
+        {'name': 'Vendor — Profile', 'description': 'Vendor shop profile and updates'},
         {'name': 'Products — Admin', 'description': 'Admin product CRUD (requires admin token)'},
         {'name': 'Cart', 'description': 'Cart management for guests and logged-in users'},
         {'name': 'Orders', 'description': 'Order placement and tracking'},

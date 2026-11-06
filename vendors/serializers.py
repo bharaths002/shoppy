@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from accounts.models import VendorProfile
-from products.models import Product, ProductVariant
+from products.models import Product, ProductVariant 
+from products.serializers import ProductCreateSerializer
 
 
 class VendorRegistrationSerializer(serializers.Serializer):
@@ -57,6 +58,46 @@ class VendorRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError("Phone must be between 10 and 15 digits.")
         return cleaned
 
+# vendors/serializers.py
+class VendorApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VendorProfile
+        fields = ['shop_name', 'shop_description', 'business_type', 'gstin',
+                  'pan_number', 'business_phone', 'business_email', 'business_address']
+
+    def validate_shop_name(self, value):
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Shop name must be at least 3 characters.")
+        qs = VendorProfile.objects.filter(shop_name__iexact=value)
+        if self.instance:                      # a rejected vendor reapplying can keep their own name
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A shop with this name already exists.")
+        return value
+
+    def validate_gstin(self, value):
+        if value and len(value) != 15:
+            raise serializers.ValidationError("GSTIN must be exactly 15 characters.")
+        return value.upper()
+
+    def validate_pan_number(self, value):
+        if value and len(value) != 10:
+            raise serializers.ValidationError("PAN number must be exactly 10 characters.")
+        return value.upper()
+
+    def validate_business_phone(self, value):
+        cleaned = value.strip().replace(' ', '').replace('-', '')
+        if not cleaned.isdigit():
+            raise serializers.ValidationError("Phone must contain only digits.")
+        if not 10 <= len(cleaned) <= 15:
+            raise serializers.ValidationError("Phone must be between 10 and 15 digits.")
+        return cleaned
+
+class VendorProductWriteSerializer(ProductCreateSerializer):
+    class Meta(ProductCreateSerializer.Meta):
+        fields = [f for f in ProductCreateSerializer.Meta.fields if f != 'is_featured']
+
 
 class VendorProfileSerializer(serializers.ModelSerializer):
     """Used to display vendor profile info"""
@@ -77,6 +118,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
             'shop_slug', 'status', 'rejection_reason',
             'commission_rate', 'is_active', 'approved_at', 'created_at'
         ]
+
 
 
 class UpdateVendorProfileSerializer(serializers.ModelSerializer):

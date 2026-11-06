@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status, serializers
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
-from .models import Product, Category, ProductImage, ProductVariant
+from .models import Product, Category, Brand, ProductImage, ProductVariant
 from .serializers import (
     ProductListSerializer, ProductDetailSerializer,
     ProductCreateSerializer, ProductVariantCreateSerializer
@@ -14,6 +14,12 @@ from .permissions import IsAdminOrStaff
 from django.db import models as db_models
 
 
+def visible_products():
+    return (Product.objects
+            .filter(is_active=True)
+            .filter(Q(vendor__isnull=True) | Q(vendor__status='approved'))
+            .select_related('category', 'brand', 'vendor')
+            .prefetch_related('images', 'variants__attributes__attribute_type'))
 class ProductListView(APIView):
     """
     GET  /api/products/          → public, anyone can view
@@ -304,6 +310,13 @@ class ProductDetailView(APIView):
         product.save()
         return Response({"message": "Product deleted successfully."}, status=status.HTTP_200_OK)
 
+class FilterOptionsView(APIView):
+    @extend_schema(summary="Categories and brands for filters", tags=["Products"])
+    def get(self, request):
+        return Response({
+            "categories": list(Category.objects.values('id', 'name', 'slug', 'parent_id')),
+            "brands": list(Brand.objects.values('id', 'name', 'slug')),
+        })
 
 class ProductImageUploadView(APIView):
     """
