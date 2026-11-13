@@ -1,3 +1,12 @@
+from decimal import Decimal
+
+FREE_SHIPPING_THRESHOLD = Decimal('999')
+SHIPPING_FEE = Decimal('49')
+
+
+def calculate_shipping(subtotal):
+    return Decimal('0') if subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_FEE
+
 def get_or_create_cart(request):
     """
     Returns the cart for the current user or guest session.

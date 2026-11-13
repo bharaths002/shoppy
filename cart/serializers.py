@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Cart, CartItem
 from products.models import Product, ProductVariant
+from .utils import calculate_shipping
 
 
 class CartItemProductSerializer(serializers.Serializer):
@@ -61,10 +62,18 @@ class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True)
     total_items = serializers.IntegerField()
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2)
+    shipping_fee = serializers.SerializerMethodField()
+    total = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ['id', 'total_items', 'subtotal', 'items', 'updated_at']
+        fields = ['id', 'total_items', 'subtotal', 'shipping_fee', 'total', 'items', 'updated_at']
+
+    def get_shipping_fee(self, obj) -> str:
+        return str(calculate_shipping(obj.subtotal))
+
+    def get_total(self, obj) -> str:
+        return str(obj.subtotal + calculate_shipping(obj.subtotal))
 
 
 class AddToCartSerializer(serializers.Serializer):

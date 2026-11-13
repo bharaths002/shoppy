@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Address
-
+from accounts.models import User
 
 class SendOTPSerializer(serializers.Serializer):
     contact = serializers.CharField()
@@ -9,6 +9,17 @@ class VerifyOTPSerializer(serializers.Serializer):
     contact = serializers.CharField()
     otp = serializers.CharField(max_length=6)
 
+    
+class MessageResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+
+
+class AuthTokensResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    role = serializers.CharField()
+    vendor_profile = serializers.DictField(allow_null=True)
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,6 +31,18 @@ class AddressSerializer(serializers.ModelSerializer):
             'address_type', 'is_default', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+class MeSerializer(serializers.ModelSerializer):
+    has_password = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'phone_number', 'username', 'first_name',
+                  'last_name', 'role', 'is_verified', 'has_password']
+        read_only_fields = ['id', 'email', 'phone_number', 'username', 'role', 'is_verified']
+
+    def get_has_password(self, obj):
+        return obj.has_usable_password()
 
 
 class CreateAddressSerializer(serializers.ModelSerializer):
@@ -64,7 +87,7 @@ class UpdateAddressSerializer(serializers.ModelSerializer):
             'address_type', 'is_default'
         ]
         # All fields optional for partial update
-        extra_kwargs = {f: {'required': False} for f in fields}
+        extra_kwargs = {f: {'required': False} for f in fields} 
 
     def validate_phone_number(self, value):
         cleaned = value.strip().replace(' ', '').replace('-', '')

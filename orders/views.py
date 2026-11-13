@@ -5,16 +5,18 @@ from rest_framework import status, serializers
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, models
 from django.conf import settings
+from decimal import Decimal
 from .models import Order, OrderItem, OrderStatusHistory
 from .serializers import (
     OrderListSerializer,
     OrderDetailSerializer,
     CreateOrderSerializer,
 )
+from cart.utils import calculate_shipping
 from .razorpay_utils import create_razorpay_order, verify_payment_signature
 from products.models import ProductVariant
 from .permissions import IsAdminOrStaff
-
+from products.models import Product
 
 class CreateOrderView(APIView):
     """
@@ -79,7 +81,7 @@ class CreateOrderView(APIView):
                 )
 
         subtotal = cart.subtotal
-        shipping_fee = 0 if subtotal >= 999 else 49
+        shipping_fee = calculate_shipping(subtotal)
         total = subtotal + shipping_fee
 
         with transaction.atomic():
@@ -110,7 +112,7 @@ class CreateOrderView(APIView):
                 commission_rate = item_vendor.commission_rate if item_vendor else 0
                 line_total = item.unit_price * item.quantity
                 commission_amount = (line_total * commission_rate / 100).quantize(
-                __import__('decimal').Decimal('0.01')
+                Decimal('0.01')
                     )
                 vendor_payout = line_total - commission_amount    
 
@@ -132,11 +134,12 @@ class CreateOrderView(APIView):
                 # Deduct stock
                 if item.variant:
                     ProductVariant.objects.filter(id=item.variant.id).update(
-                        stock=item.variant.stock - item.quantity
+                        stock=models.F("stock") - item.quantity
                     )
                 else:
-                    item.product.stock -= item.quantity
-                    item.product.save()
+                    Product.objects.filter(id=item.product.id).update(
+                        stock=models.F("stock") - item.quantity
+                    )
 
             OrderStatusHistory.objects.create(
                 order=order, status="pending", note="Order placed"
@@ -235,6 +238,22 @@ class VerifyPaymentView(APIView):
         except Order.DoesNotExist:
             return Response(
                 {"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        # Prevent payment verification for cancelled orders
+        if order.status == "cancelled":
+            return Response(
+                {"error": "This order was cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Prevent duplicate payment verification
+        if order.payment_status == "paid":
+            return Response(
+                {
+                    "message": "Payment already verified.",
+                    "order": OrderDetailSerializer(order).data,
+                },
+                status=status.HTTP_200_OK,
             )
 
         if not order.razorpay_order_id:

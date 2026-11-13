@@ -5,13 +5,21 @@ from rest_framework.response import Response
 from rest_framework import status, serializers
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
-from .models import Product, Category, ProductImage, ProductVariant
+from .models import Product, Category, Brand, ProductImage, ProductVariant
 from .serializers import (
     ProductListSerializer, ProductDetailSerializer,
     ProductCreateSerializer, ProductVariantCreateSerializer
 )
 from .permissions import IsAdminOrStaff
 from django.db import models as db_models
+
+
+def visible_products():
+    return (Product.objects
+            .filter(is_active=True)
+            .filter(Q(vendor__isnull=True) | Q(vendor__status='approved'))
+            .select_related('category', 'brand', 'vendor')
+            .prefetch_related('images', 'variants__attributes__attribute_type'))
 
 
 class ProductListView(APIView):
@@ -305,6 +313,38 @@ class ProductDetailView(APIView):
         return Response({"message": "Product deleted successfully."}, status=status.HTTP_200_OK)
 
 
+class FilterOptionsView(APIView):
+
+    @extend_schema(
+        summary="Categories and brands for filters",
+        responses=inline_serializer(
+            name='FilterOptionsResponse',
+            fields={
+                'categories': serializers.ListField(
+                    child=serializers.DictField()
+                ),
+                'brands': serializers.ListField(
+                    child=serializers.DictField()
+                ),
+            }
+        ),
+        tags=["Products"]
+    )
+    def get(self, request):
+        categories = Category.objects.filter(
+            is_active=True
+        ).values('id', 'name', 'slug')
+
+        brands = Brand.objects.all().values(
+            'id', 'name', 'slug'
+        )
+
+        return Response({
+            "categories": list(categories),
+            "brands": list(brands)
+        })
+
+
 class ProductImageUploadView(APIView):
     """
     POST   /api/products/<slug>/images/   → upload images
@@ -515,10 +555,8 @@ class FeaturedProductsView(APIView):
         tags=["Products"]
     )
     def get(self, request):
-        products = Product.objects.filter(
-            is_active=True, is_featured=True
-        ).select_related('category', 'brand').prefetch_related(
-            'images', 'variants__attributes__attribute_type'
+        products = visible_products().filter(
+            is_featured=True
         ).order_by('-created_at')[:10]
         serializer = ProductListSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)
@@ -535,11 +573,8 @@ class NewArrivalsView(APIView):
     def get(self, request):
         from django.utils import timezone
         from datetime import timedelta
-        products = Product.objects.filter(
-            is_active=True,
+        products = visible_products().filter(
             created_at__gte=timezone.now() - timedelta(days=30)
-        ).select_related('category', 'brand').prefetch_related(
-            'images', 'variants__attributes__attribute_type'
         ).order_by('-created_at')[:20]
         serializer = ProductListSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)

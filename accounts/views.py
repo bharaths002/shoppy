@@ -15,7 +15,7 @@ from datetime import timedelta
 from cart.utils import merge_guest_cart_to_user
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
-from .serializers import AddressSerializer, CreateAddressSerializer, UpdateAddressSerializer
+from .serializers import AddressSerializer, CreateAddressSerializer, UpdateAddressSerializer, MeSerializer
 from vendors.views import get_user_role_data
 
 
@@ -86,6 +86,13 @@ class SendOTPView(APIView):
         lookup = {"email": email} if email else {"phone_number": phone}
         user_exists = User.objects.filter(**lookup).exists()
 
+        # Forgot-password flow: only send an OTP to an existing account
+        if request.data.get("purpose") == "reset" and not user_exists:
+            return Response(
+                {"error": "No account found with this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
         # Layer 3: 15-second resend cooldown
         existing = OTP.objects.filter(contact=contact).order_by('-created_at').first()
         if existing and not existing.can_resend():
@@ -225,7 +232,74 @@ class VerifyOTPView(APIView):
             },
             status=status.HTTP_200_OK
         )
+    
+# Reset Password View
+class ResetPasswordView(APIView):
+    @extend_schema(
+        summary="Reset password with OTP",
+        description="Step 1: POST /api/accounts/sendotp/ with {email, purpose: 'reset'}. Step 2: this endpoint.",
+        request=inline_serializer(
+            name='ResetPasswordRequest',
+            fields={
+                'email': serializers.EmailField(),
+                'otp': serializers.CharField(),
+                'password': serializers.CharField(),
+                'confirm_password': serializers.CharField(),
+            }
+        ),
+        tags=["Authentication"]
+    )
+    def post(self, request):
+        email = request.data.get("email")
+        otp_input = request.data.get("otp")
+        password = request.data.get("password")
+        confirm_password = request.data.get("confirm_password")
 
+        if not email or not otp_input or not password or not confirm_password:
+            return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if password != confirm_password:
+            return Response({"error": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(password) < 8:
+            return Response({"error": "Password must be at least 8 characters."}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp_obj = OTP.objects.filter(
+            contact=email, is_verified=False
+        ).order_by('-created_at').first()
+
+        if not otp_obj:
+            return Response({"error": "OTP not found. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_obj.attempts >= 5:
+            otp_obj.delete()
+            return Response({"error": "Too many failed attempts. Please request a new OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_obj.is_expired():
+            otp_obj.delete()
+            return Response({"error": "OTP has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_obj.otp != otp_input:
+            otp_obj.attempts += 1
+            otp_obj.save()
+            remaining = 5 - otp_obj.attempts
+            return Response({"error": f"Invalid OTP. {remaining} attempt(s) remaining."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"error": "No account found with this email."}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(password)
+        user.save(update_fields=['password'])
+        otp_obj.delete()
+
+        # Sign the user out everywhere: blacklist all their refresh tokens
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
+
+        return Response(
+            {"message": "Password reset successful. You can now log in."},
+            status=status.HTTP_200_OK
+        )
 
 #  Email + Password login
 class EmailPasswordLoginView(APIView):
@@ -270,11 +344,12 @@ class EmailPasswordLoginView(APIView):
 
         # Authenticate
         authenticated_user = authenticate(request, username=email, password=password)
-        if not authenticated_user:
+        if not authenticated_user:   
             return Response(
                 {"error": "Incorrect password."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+        merge_guest_cart_to_user(request, authenticated_user)
 
         # Generate JWT tokens
         refresh = RefreshToken.for_user(authenticated_user)
@@ -340,7 +415,19 @@ class SetPasswordView(APIView):
         )          
     
 
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Get my account", responses=MeSerializer, tags=["Accounts"])
+    def get(self, request):
+        return Response(MeSerializer(request.user).data)
+
+    @extend_schema(summary="Update my name", request=MeSerializer, responses=MeSerializer, tags=["Accounts"])
+    def patch(self, request):
+        s = MeSerializer(request.user, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data)
 
 class AddressListCreateView(APIView):
     """
