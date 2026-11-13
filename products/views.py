@@ -20,6 +20,8 @@ def visible_products():
             .filter(Q(vendor__isnull=True) | Q(vendor__status='approved'))
             .select_related('category', 'brand', 'vendor')
             .prefetch_related('images', 'variants__attributes__attribute_type'))
+
+
 class ProductListView(APIView):
     """
     GET  /api/products/          → public, anyone can view
@@ -310,13 +312,38 @@ class ProductDetailView(APIView):
         product.save()
         return Response({"message": "Product deleted successfully."}, status=status.HTTP_200_OK)
 
+
 class FilterOptionsView(APIView):
-    @extend_schema(summary="Categories and brands for filters", tags=["Products"])
+
+    @extend_schema(
+        summary="Categories and brands for filters",
+        responses=inline_serializer(
+            name='FilterOptionsResponse',
+            fields={
+                'categories': serializers.ListField(
+                    child=serializers.DictField()
+                ),
+                'brands': serializers.ListField(
+                    child=serializers.DictField()
+                ),
+            }
+        ),
+        tags=["Products"]
+    )
     def get(self, request):
+        categories = Category.objects.filter(
+            is_active=True
+        ).values('id', 'name', 'slug')
+
+        brands = Brand.objects.all().values(
+            'id', 'name', 'slug'
+        )
+
         return Response({
-            "categories": list(Category.objects.values('id', 'name', 'slug', 'parent_id')),
-            "brands": list(Brand.objects.values('id', 'name', 'slug')),
+            "categories": list(categories),
+            "brands": list(brands)
         })
+
 
 class ProductImageUploadView(APIView):
     """
@@ -528,10 +555,8 @@ class FeaturedProductsView(APIView):
         tags=["Products"]
     )
     def get(self, request):
-        products = Product.objects.filter(
-            is_active=True, is_featured=True
-        ).select_related('category', 'brand').prefetch_related(
-            'images', 'variants__attributes__attribute_type'
+        products = visible_products().filter(
+            is_featured=True
         ).order_by('-created_at')[:10]
         serializer = ProductListSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)
@@ -548,11 +573,8 @@ class NewArrivalsView(APIView):
     def get(self, request):
         from django.utils import timezone
         from datetime import timedelta
-        products = Product.objects.filter(
-            is_active=True,
+        products = visible_products().filter(
             created_at__gte=timezone.now() - timedelta(days=30)
-        ).select_related('category', 'brand').prefetch_related(
-            'images', 'variants__attributes__attribute_type'
         ).order_by('-created_at')[:20]
         serializer = ProductListSerializer(products, many=True, context={'request': request})
         return Response(serializer.data)

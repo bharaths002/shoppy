@@ -8,6 +8,7 @@ from .views import (
     VendorVariantView,
     VendorOrderListView,
     VendorOrderDetailView,
+    VendorApplyView,
     VendorUpdateOrderItemStatusView,
     VendorInventoryView,
     VendorUpdateProductStockView,
@@ -21,6 +22,7 @@ urlpatterns = [
     # Auth
     path('register/', VendorRegisterView.as_view(), name='vendor-register'),
     path('profile/', VendorProfileView.as_view(), name='vendor-profile'),
+    path('apply/', VendorApplyView.as_view(), name='vendor-apply'),
 
       # Dashboard
     path('dashboard/', VendorDashboardView.as_view(), name='vendor-dashboard'),

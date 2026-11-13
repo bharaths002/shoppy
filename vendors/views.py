@@ -17,7 +17,7 @@ from products.serializers import (
     ProductCreateSerializer, ProductVariantCreateSerializer
 )
 from .serializers import (
-    VendorRegistrationSerializer, VendorApplicationSerializer,
+    VendorRegistrationSerializer, VendorApplicationSerializer, VendorProductWriteSerializer,
     VendorProfileSerializer,
     UpdateVendorProfileSerializer,ProductInventorySerializer
 )
@@ -167,7 +167,7 @@ class VendorRegisterView(APIView):
 
         if user and user.role == 'customer':
             return Response(
-                {"error": "This email is already registered as a customer account. Please use a different email for vendor registration."},
+                {"error": "This email already has an account. Log in and apply from your profile (Sell on Shoppy)."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -418,7 +418,7 @@ class VendorProductListView(APIView):
         Vendor is automatically set from the logged-in user — no need to pass it.
         Product starts as inactive by default — vendor must activate after adding images and variants.
         """,
-        request=ProductCreateSerializer,
+        request=VendorProductWriteSerializer,
         responses={
             201: ProductDetailSerializer,
             400: inline_serializer(
@@ -431,7 +431,7 @@ class VendorProductListView(APIView):
     def post(self, request):
         vendor = request.user.vendor_profile
 
-        serializer = ProductCreateSerializer(
+        serializer = VendorProductWriteSerializer(
             data=request.data, context={'request': request}
         )
         if not serializer.is_valid():
@@ -493,7 +493,7 @@ class VendorProductDetailView(APIView):
     @extend_schema(
         summary="Update my product",
         description="Vendor can update their own product. Cannot change vendor ownership.",
-        request=ProductCreateSerializer,
+        request=VendorProductWriteSerializer,
         responses={
             200: ProductDetailSerializer,
             404: inline_serializer(
@@ -511,7 +511,7 @@ class VendorProductDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = ProductCreateSerializer(
+        serializer = VendorProductWriteSerializer(
             product, data=request.data,
             partial=True, context={'request': request}
         )
@@ -1545,7 +1545,9 @@ class VendorDashboardView(APIView):
         thirty_days_ago = now - timedelta(days=30)
 
         # ── All vendor order items ─────────────────────────────
-        all_items = OrderItem.objects.filter(vendor=vendor)
+        all_items = OrderItem.objects.filter(vendor=vendor).exclude(
+            order__status__in=['cancelled', 'returned']
+        )
 
         # ── Overall stats ──────────────────────────────────────
         overall = all_items.aggregate(

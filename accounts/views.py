@@ -92,6 +92,7 @@ class SendOTPView(APIView):
                 {"error": "No account found with this email."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
         # Layer 3: 15-second resend cooldown
         existing = OTP.objects.filter(contact=contact).order_by('-created_at').first()
         if existing and not existing.can_resend():
@@ -343,11 +344,12 @@ class EmailPasswordLoginView(APIView):
 
         # Authenticate
         authenticated_user = authenticate(request, username=email, password=password)
-        if not authenticated_user:
+        if not authenticated_user:   
             return Response(
                 {"error": "Incorrect password."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+        merge_guest_cart_to_user(request, authenticated_user)
 
         # Generate JWT tokens
         refresh = RefreshToken.for_user(authenticated_user)

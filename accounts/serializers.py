@@ -9,6 +9,17 @@ class VerifyOTPSerializer(serializers.Serializer):
     contact = serializers.CharField()
     otp = serializers.CharField(max_length=6)
 
+    
+class MessageResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+
+
+class AuthTokensResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    role = serializers.CharField()
+    vendor_profile = serializers.DictField(allow_null=True)
 
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -76,7 +87,7 @@ class UpdateAddressSerializer(serializers.ModelSerializer):
             'address_type', 'is_default'
         ]
         # All fields optional for partial update
-        extra_kwargs = {f: {'required': False} for f in fields}
+        extra_kwargs = {f: {'required': False} for f in fields} 
 
     def validate_phone_number(self, value):
         cleaned = value.strip().replace(' ', '').replace('-', '')
