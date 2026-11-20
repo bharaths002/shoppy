@@ -5,13 +5,14 @@ from rest_framework.response import Response
 from rest_framework import status, serializers
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
-from .models import Product, Category, Brand, ProductImage, ProductVariant
+from .models import Product, Category, Brand, ProductImage, ProductVariant, AttributeType
 from .serializers import (
     ProductListSerializer, ProductDetailSerializer,
     ProductCreateSerializer, ProductVariantCreateSerializer
 )
 from .permissions import IsAdminOrStaff
 from django.db import models as db_models
+
 
 
 def visible_products():
@@ -212,6 +213,7 @@ class ProductDetailView(APIView):
         return []
 
     def get_object(self, slug):
+        """Admin write methods use this: it also finds inactive products."""
         try:
             return Product.objects.select_related('category', 'brand').prefetch_related(
                 'images', 'variants__attributes__attribute_type'
@@ -221,7 +223,7 @@ class ProductDetailView(APIView):
 
     @extend_schema(
         summary="Get product detail",
-        description="Public. Returns full product detail including all images, variants and attributes.",
+        description="Public. Returns full product detail including all images, variants and attributes. Hidden if the product is inactive or its vendor isn't approved.",
         responses={
             200: ProductDetailSerializer,
             404: inline_serializer(
@@ -232,11 +234,12 @@ class ProductDetailView(APIView):
         tags=["Products"]
     )
     def get(self, request, slug):
-        product = self.get_object(slug)
-        if not product or not product.is_active:
+        product = visible_products().filter(slug=slug).first()
+        if not product:
             return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = ProductDetailSerializer(product, context={'request': request})
         return Response(serializer.data)
+
 
     @extend_schema(
         summary="Full update a product",
@@ -316,32 +319,24 @@ class ProductDetailView(APIView):
 class FilterOptionsView(APIView):
 
     @extend_schema(
-        summary="Categories and brands for filters",
+        summary="Categories, brands and attribute types for filters and forms",
         responses=inline_serializer(
             name='FilterOptionsResponse',
             fields={
-                'categories': serializers.ListField(
-                    child=serializers.DictField()
-                ),
-                'brands': serializers.ListField(
-                    child=serializers.DictField()
-                ),
+                'categories': serializers.ListField(child=serializers.DictField()),
+                'brands': serializers.ListField(child=serializers.DictField()),
+                'attribute_types': serializers.ListField(child=serializers.DictField()),
             }
         ),
         tags=["Products"]
     )
     def get(self, request):
-        categories = Category.objects.filter(
-            is_active=True
-        ).values('id', 'name', 'slug')
-
-        brands = Brand.objects.all().values(
-            'id', 'name', 'slug'
-        )
-
         return Response({
-            "categories": list(categories),
-            "brands": list(brands)
+            "categories": list(
+                Category.objects.filter(is_active=True).values('id', 'name', 'slug', 'parent_id')
+            ),
+            "brands": list(Brand.objects.values('id', 'name', 'slug')),
+            "attribute_types": list(AttributeType.objects.values('id', 'name')),
         })
 
 

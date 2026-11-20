@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from accounts.models import VendorProfile
 from products.models import Product, ProductVariant 
-from products.serializers import ProductCreateSerializer
+from products.serializers import ProductCreateSerializer, ProductListSerializer
 
 
 class VendorRegistrationSerializer(serializers.Serializer):
@@ -94,6 +94,11 @@ class VendorApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Phone must be between 10 and 15 digits.")
         return cleaned
 
+class VendorProductListSerializer(ProductListSerializer):
+    """The vendor's own catalogue: also shows stock and whether the product is live."""
+
+    class Meta(ProductListSerializer.Meta):
+        fields = ProductListSerializer.Meta.fields + ['is_active', 'stock']
 class VendorProductWriteSerializer(ProductCreateSerializer):
     class Meta(ProductCreateSerializer.Meta):
         fields = [f for f in ProductCreateSerializer.Meta.fields if f != 'is_featured']

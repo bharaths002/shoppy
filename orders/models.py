@@ -67,14 +67,31 @@ class Order(models.Model):
     def __str__(self):
         return f"{self.order_number} — {self.user.email or self.user.phone_number}"
 
+
+    def settle_cod_payment(self):
+        """Cash on delivery is paid when the order is delivered."""
+        if self.payment_method == 'cod' and self.status == 'delivered' and self.payment_status == 'pending':
+            self.payment_status = 'paid'
+            self.save(update_fields=['payment_status', 'updated_at'])
+            OrderStatusHistory.objects.create(order=self, status='delivered', note='Cash collected on delivery')
+            
     class Meta:
         ordering = ['-created_at']
+
+
 
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True)
     variant = models.ForeignKey(ProductVariant, on_delete=models.SET_NULL, null=True, blank=True)
+
+    ITEM_STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('shipped', 'Shipped'),
+        ('delivered', 'Delivered'),
+    )
+    status = models.CharField(max_length=15, choices=ITEM_STATUS_CHOICES, default='pending')
 
 
         # ✅ New — vendor FK on OrderItem

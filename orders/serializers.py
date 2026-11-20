@@ -16,13 +16,18 @@ class AddressSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     line_total = serializers.DecimalField(max_digits=10, decimal_places=2)
+    product_slug = serializers.SerializerMethodField()
+
 
     class Meta:
         model = OrderItem
         fields = [
-            'id', 'product', 'variant', 'product_name',
-            'variant_details', 'unit_price', 'quantity', 'line_total'
+            'id', 'product', 'product_slug', 'variant', 'product_name',
+            'variant_details', 'unit_price', 'quantity', 'line_total' , 'status'
         ]
+        
+    def get_product_slug(self, obj):
+        return obj.product.slug if obj.product else None   
 
 
 class OrderStatusHistorySerializer(serializers.ModelSerializer):
@@ -118,7 +123,7 @@ class VendorOrderItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'product_name', 'variant_details',
             'unit_price', 'quantity', 'line_total',
-            'commission_rate', 'commission_amount', 'vendor_payout'
+            'commission_rate', 'commission_amount', 'vendor_payout', 'status'
         ]
 
 

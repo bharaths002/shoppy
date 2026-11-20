@@ -369,51 +369,78 @@ class EmailPasswordLoginView(APIView):
 
 
 class SetPasswordView(APIView):
-    
-    permission_classes = [IsAuthenticated]  # must be logged in
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="Set password for logged-in user",
+        summary="Set or change password for the logged-in user",
+        description="""
+        OTP-only accounts (no password yet) send password + confirm_password.
+        Accounts that already have a password must also send current_password.
+        On success every older login is signed out and a fresh access/refresh pair is returned.
+        """,
         request=inline_serializer(
             name='SetPasswordRequest',
             fields={
+                'current_password': serializers.CharField(required=False),
                 'password': serializers.CharField(required=True),
                 'confirm_password': serializers.CharField(required=True),
             }
         ),
+        responses={200: inline_serializer(
+            name='SetPasswordResponse',
+            fields={
+                'message': serializers.CharField(),
+                'access': serializers.CharField(),
+                'refresh': serializers.CharField(),
+            }
+        )},
         tags=["Authentication"]
     )
-
     def post(self, request):
+        user = request.user
         password = request.data.get("password")
         confirm_password = request.data.get("confirm_password")
 
         if not password or not confirm_password:
-            return Response(
-                {"error": "Both password fields are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Both password fields are required."}, status=status.HTTP_400_BAD_REQUEST)
         if password != confirm_password:
-            return Response(
-                {"error": "Passwords do not match."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"error": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
         if len(password) < 8:
-            return Response(
-                {"error": "Password must be at least 8 characters."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "Password must be at least 8 characters."}, status=status.HTTP_400_BAD_REQUEST)
 
-        request.user.set_password(password)
-        request.user.save()
+        if user.has_usable_password():
+            # limit guesses, so a stolen access token can't be used to brute-force the current password
+            if is_ratelimited(request, group='set_password', key='user', rate='5/10m', method='POST', increment=True):
+                return Response(
+                    {"error": "Too many attempts. Please try again after 10 minutes."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            current_password = request.data.get("current_password")
+            if not current_password or not user.check_password(current_password):
+                return Response({"error": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+            if current_password == password:
+                return Response(
+                    {"error": "Your new password must be different from the current one."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        user.set_password(password)
+        user.save(update_fields=['password'])
+
+        # sign out every older login, then hand this browser a fresh pair
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
+        refresh = RefreshToken.for_user(user)
 
         return Response(
-            {"message": "Password set successfully. You can now login with email and password."},
+            {
+                "message": "Password updated successfully.",
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
             status=status.HTTP_200_OK
-        )          
-    
+        )
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]

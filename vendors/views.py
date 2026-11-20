@@ -1,35 +1,48 @@
 import secrets
-from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, serializers
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
+from datetime import timedelta
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
+from django.db.models import Count, DecimalField as DField, F, Q, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiParameter
+from rest_framework import serializers, status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from accounts.models import OTP, VendorProfile, User
-from products.models import (
-    Product, ProductImage, ProductVariant
-)
-from products.serializers import (
-    ProductListSerializer, ProductDetailSerializer,
-    ProductCreateSerializer, ProductVariantCreateSerializer
-)
-from .serializers import (
-    VendorRegistrationSerializer, VendorApplicationSerializer, VendorProductWriteSerializer,
-    VendorProfileSerializer,
-    UpdateVendorProfileSerializer,ProductInventorySerializer
-)
-from .permissions import IsVendor
 from orders.models import Order, OrderItem, OrderStatusHistory
 from orders.serializers import (
     VendorOrderSerializer,
     VendorOrderDetailSerializer
 )
-
-
-
+from products.models import (
+    Product, ProductImage, ProductVariant
+)
+from products.serializers import (
+    ProductDetailSerializer,
+    ProductVariantCreateSerializer
+)
+from .permissions import IsVendor
+from .serializers import (
+    BulkStockUpdateSerializer,
+    ProductInventorySerializer,
+    UpdateSimpleProductStockSerializer,
+    UpdateVariantStockSerializer,
+    UpdateVendorProfileSerializer,
+    VendorApplicationSerializer,
+    VendorProductListSerializer,
+    VendorProductWriteSerializer,
+    VendorProfileSerializer,
+    VendorRegistrationSerializer,
+)
 
 
 def get_user_role_data(user):
@@ -48,6 +61,7 @@ def get_user_role_data(user):
     if user.is_superuser or user.is_staff:
         role_data["role"] = "admin"
     return role_data
+
 
 def notify_admin_new_vendor(vendor_profile):
     try:
@@ -70,6 +84,8 @@ http://127.0.0.1:8000/admin/accounts/vendorprofile/
         )
     except Exception:
         pass  # never block the application if email fails
+
+
 class VendorRegisterView(APIView):
     """
     POST /api/vendors/register/
@@ -215,7 +231,13 @@ class VendorRegisterView(APIView):
             status=status.HTTP_201_CREATED
         )
 
+
 class VendorApplyView(APIView):
+    """
+    POST /api/vendors/apply/
+    A logged-in customer applies to become a vendor from their profile.
+    A rejected application can be corrected and submitted again.
+    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -242,14 +264,15 @@ class VendorApplyView(APIView):
         profile = serializer.save(
             user=user, status='pending', rejection_reason='', is_active=False
         )
-        notify_admin_new_vendor(profile)   # move your existing send_mail block into this helper
+        notify_admin_new_vendor(profile)
 
         return Response(
             {"message": "Application submitted. You'll be notified once reviewed.",
              "vendor_profile": VendorProfileSerializer(profile).data},
             status=status.HTTP_201_CREATED
         )
-    
+
+
 class VendorProfileView(APIView):
     """
     GET   /api/vendors/profile/   → view own vendor profile
@@ -320,7 +343,6 @@ class VendorProfileView(APIView):
             VendorProfileSerializer(vendor).data,
             status=status.HTTP_200_OK
         )
-    
 
 
 # ─────────────────────────────────────────────────────────────
@@ -337,8 +359,8 @@ class VendorProductListView(APIView):
     @extend_schema(
         summary="List my products",
         description="""
-        Vendor sees only their own products.
-        Supports search, filter by category, is_active status.
+        Vendor sees only their own products (active and inactive), with stock and active status.
+        Supports search and is_active filter.
         """,
         parameters=[
             OpenApiParameter(name='search', type=OpenApiTypes.STR, required=False),
@@ -352,7 +374,7 @@ class VendorProductListView(APIView):
                 'count': serializers.IntegerField(),
                 'page': serializers.IntegerField(),
                 'total_pages': serializers.IntegerField(),
-                'results': ProductListSerializer(many=True),
+                'results': VendorProductListSerializer(many=True),
             }
         )},
         tags=["Vendor — Products"]
@@ -372,7 +394,6 @@ class VendorProductListView(APIView):
         # Search
         search = request.query_params.get('search')
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(name__icontains=search) |
                 Q(description__icontains=search)
@@ -398,7 +419,7 @@ class VendorProductListView(APIView):
         start = (page - 1) * page_size
         end = start + page_size
 
-        serializer = ProductListSerializer(
+        serializer = VendorProductListSerializer(
             queryset[start:end], many=True, context={'request': request}
         )
         return Response({
@@ -417,6 +438,7 @@ class VendorProductListView(APIView):
         Vendor creates a new product under their shop.
         Vendor is automatically set from the logged-in user — no need to pass it.
         Product starts as inactive by default — vendor must activate after adding images and variants.
+        Vendors cannot mark their own products as featured.
         """,
         request=VendorProductWriteSerializer,
         responses={
@@ -492,7 +514,7 @@ class VendorProductDetailView(APIView):
 
     @extend_schema(
         summary="Update my product",
-        description="Vendor can update their own product. Cannot change vendor ownership.",
+        description="Vendor can update their own product. Cannot change vendor ownership or featured status.",
         request=VendorProductWriteSerializer,
         responses={
             200: ProductDetailSerializer,
@@ -559,7 +581,6 @@ class VendorProductImageView(APIView):
     POST   /api/vendors/products/<slug>/images/            → upload images
     DELETE /api/vendors/products/<slug>/images/<image_id>/ → delete image
     """
-    from rest_framework.parsers import MultiPartParser, FormParser
     permission_classes = [IsVendor]
     parser_classes = [MultiPartParser, FormParser]
 
@@ -705,6 +726,7 @@ class VendorVariantView(APIView):
 
     @extend_schema(
         summary="Update my product variant",
+        description="Partial update — only the fields you send change. Sending attributes replaces all of them.",
         request=ProductVariantCreateSerializer,
         responses={
             200: inline_serializer(
@@ -729,8 +751,9 @@ class VendorVariantView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # partial=True so changing one field doesn't reset stock / is_active to their defaults
         serializer = ProductVariantCreateSerializer(
-            variant, data=request.data,
+            variant, data=request.data, partial=True,
             context={'request': request}
         )
         if serializer.is_valid():
@@ -766,8 +789,12 @@ class VendorVariantView(APIView):
             return Response(
                 {"error": "Variant not found."},
                 status=status.HTTP_404_NOT_FOUND
-            )    
-        
+            )
+
+
+# ─────────────────────────────────────────────────────────────
+# Vendor Orders
+# ─────────────────────────────────────────────────────────────
 
 class VendorOrderListView(APIView):
     """
@@ -810,7 +837,7 @@ class VendorOrderListView(APIView):
         # ✅ Find orders that have at least one item belonging to this vendor
         orders = Order.objects.filter(
             items__vendor=vendor
-        ).distinct().order_by('-created_at')
+        ).distinct().select_related('shipping_address').order_by('-created_at')
 
         # Filter by status
         status_filter = request.query_params.get('status')
@@ -897,35 +924,41 @@ class VendorOrderDetailView(APIView):
 class VendorUpdateOrderItemStatusView(APIView):
     """
     PATCH /api/vendors/orders/<order_id>/items/<item_id>/status/
-    Vendor updates the status of their own order items.
-    For example: marking an item as shipped after dispatching.
+    A vendor moves one of their own order items forward: pending -> shipped -> delivered.
+    The order's overall status follows its items.
     """
     permission_classes = [IsVendor]
+
+    # the only allowed next step for each current item status
+    NEXT_STATUS = {'pending': 'shipped', 'shipped': 'delivered'}
 
     @extend_schema(
         summary="Update order item status",
         description="""
-        Vendor can update status of their own order items only.
-        This is separate from the full order status which admin controls.
-        Useful for tracking per-vendor fulfillment in a multi-vendor order.
-        Valid statuses: confirmed | shipped | delivered | cancelled
+        A vendor can move their own order items forward: pending → shipped → delivered.
+        Steps can't be skipped or reversed, and only confirmed or shipped orders can be updated.
+        When every item in the order is shipped, the order becomes 'shipped';
+        when every item is delivered, the order becomes 'delivered'.
+        Cancellations and refunds are handled by the platform, not by vendors.
         """,
         request=inline_serializer(
             name='VendorItemStatusUpdateRequest',
             fields={
-                'status': serializers.ChoiceField(
-                    choices=['confirmed', 'shipped', 'delivered', 'cancelled']
-                ),
+                'status': serializers.ChoiceField(choices=['shipped', 'delivered']),
                 'note': serializers.CharField(required=False),
             }
         ),
         responses={
             200: inline_serializer(
                 name='VendorItemStatusUpdateResponse',
-                fields={'message': serializers.CharField()}
+                fields={
+                    'message': serializers.CharField(),
+                    'item_status': serializers.CharField(),
+                    'order_status': serializers.CharField(),
+                }
             ),
-            403: inline_serializer(
-                name='VendorItemStatusForbiddenResponse',
+            400: inline_serializer(
+                name='VendorItemStatusErrorResponse',
                 fields={'error': serializers.CharField()}
             ),
             404: inline_serializer(
@@ -937,42 +970,86 @@ class VendorUpdateOrderItemStatusView(APIView):
     )
     def patch(self, request, order_id, item_id):
         vendor = request.user.vendor_profile
-
-        # ✅ Vendor can only update their own items
-        try:
-            item = OrderItem.objects.get(
-                id=item_id,
-                order__id=order_id,
-                vendor=vendor
-            )
-        except OrderItem.DoesNotExist:
-            return Response(
-                {"error": "Order item not found."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
         new_status = request.data.get('status')
-        valid_statuses = ['confirmed', 'shipped', 'delivered', 'cancelled']
-        if new_status not in valid_statuses:
+
+        if new_status not in ('shipped', 'delivered'):
             return Response(
-                {"error": f"Invalid status. Valid options: {', '.join(valid_statuses)}"},
+                {"error": "Invalid status. Valid options: shipped, delivered."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        note = request.data.get('note', f"Updated by vendor: {vendor.shop_name}")
+        with transaction.atomic():
+            # Lock the order row so two vendors updating at the same time can't clash
+            order = Order.objects.select_for_update().filter(id=order_id).first()
 
-        # Log on the parent order's history
-        OrderStatusHistory.objects.create(
-            order=item.order,
-            status=new_status,
-            note=f"{item.product_name}: {note}"
-        )
+            # ✅ Vendor can only update their own items (same 404 whether the order or the item is missing)
+            item = order.items.filter(id=item_id, vendor=vendor).first() if order else None
+            if not item:
+                return Response(
+                    {"error": "Order item not found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            if order.status not in ('confirmed', 'shipped'):
+                return Response(
+                    {"error": f"This order is '{order.status}', so its items can't be updated."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            expected = self.NEXT_STATUS.get(item.status)
+            if expected is None:
+                return Response(
+                    {"error": "This item is already delivered."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if new_status != expected:
+                return Response(
+                    {"error": f"This item can only be marked '{expected}' next."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            item.status = new_status
+            item.save(update_fields=['status'])
+
+            note = request.data.get('note') or f"{item.product_name} marked {new_status} by {vendor.shop_name}"
+            OrderStatusHistory.objects.create(
+                order=order, status=new_status, note=note[:255]
+            )
+
+
+            # Keep the order-level status in step with all of its items
+            item_statuses = set(order.items.values_list('status', flat=True))
+            if item_statuses == {'delivered'}:
+                order_status = 'delivered'
+            elif item_statuses <= {'shipped', 'delivered'}:
+                order_status = 'shipped'
+            else:
+                order_status = order.status
+
+            if order_status != order.status:
+                order.status = order_status
+                order.save(update_fields=['status', 'updated_at'])
+                OrderStatusHistory.objects.create(
+                    order=order,
+                    status=order_status,
+                    note=f"All items {order_status}"
+                )
+            if order_status == 'delivered':
+                order.settle_cod_payment()            
 
         return Response(
-            {"message": f"Item status updated to '{new_status}'."},
+            {
+                "message": f"Item marked as {new_status}.",
+                "item_status": new_status,
+                "order_status": order.status,
+            },
             status=status.HTTP_200_OK
-        )        
-    
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# Vendor Inventory
+# ─────────────────────────────────────────────────────────────
 
 class VendorInventoryView(APIView):
     """
@@ -1034,7 +1111,6 @@ class VendorInventoryView(APIView):
         tags=["Vendor — Inventory"]
     )
     def get(self, request):
-        from .serializers import ProductInventorySerializer
         vendor = request.user.vendor_profile
 
         # ✅ Always scoped to this vendor
@@ -1048,7 +1124,6 @@ class VendorInventoryView(APIView):
         # Search by name
         search = request.query_params.get('search')
         if search:
-            from django.db.models import Q
             queryset = queryset.filter(
                 Q(name__icontains=search) |
                 Q(variants__sku__icontains=search)
@@ -1184,7 +1259,6 @@ class VendorUpdateProductStockView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        from .serializers import UpdateSimpleProductStockSerializer
         serializer = UpdateSimpleProductStockSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1263,7 +1337,6 @@ class VendorUpdateVariantStockView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        from .serializers import UpdateVariantStockSerializer
         serializer = UpdateVariantStockSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1301,7 +1374,7 @@ class VendorBulkStockUpdateView(APIView):
         summary="Bulk update stock",
         description="""
         Update stock for multiple variants in one API call.
-        Maximum 100 updates per request.
+        Maximum 100 updates per request. All updates are applied together or not at all.
         Only updates variants belonging to this vendor — unknown or other vendors' SKUs are skipped safely.
 
         Example:
@@ -1353,7 +1426,6 @@ class VendorBulkStockUpdateView(APIView):
         tags=["Vendor — Inventory"]
     )
     def post(self, request):
-        from .serializers import BulkStockUpdateSerializer
         vendor = request.user.vendor_profile
 
         serializer = BulkStockUpdateSerializer(data=request.data)
@@ -1365,40 +1437,42 @@ class VendorBulkStockUpdateView(APIView):
         skipped_skus = []
         updated_count = 0
 
-        for update in updates:
-            sku = update['sku']
-            new_stock = update['stock']
+        # one transaction: a failure half-way can't leave some SKUs updated and others not
+        with transaction.atomic():
+            for update in updates:
+                sku = update['sku']
+                new_stock = update['stock']
 
-            # ✅ Only update variants belonging to this vendor's products
-            variant = ProductVariant.objects.filter(
-                sku=sku,
-                product__vendor=vendor
-            ).select_related('product').first()
+                # ✅ Only update variants belonging to this vendor's products
+                variant = ProductVariant.objects.filter(
+                    sku=sku,
+                    product__vendor=vendor
+                ).select_related('product').first()
 
-            if not variant:
-                # SKU not found or belongs to another vendor — skip silently
-                skipped_skus.append(sku)
-                continue
+                if not variant:
+                    # SKU not found or belongs to another vendor — skip silently
+                    skipped_skus.append(sku)
+                    continue
 
-            old_stock = variant.stock
-            variant.stock = new_stock
-            variant.save()
-            updated_count += 1
+                old_stock = variant.stock
+                variant.stock = new_stock
+                variant.save()
+                updated_count += 1
 
-            if new_stock == 0:
-                stock_status = "out_of_stock"
-            elif new_stock <= 10:
-                stock_status = "low_stock"
-            else:
-                stock_status = "in_stock"
+                if new_stock == 0:
+                    stock_status = "out_of_stock"
+                elif new_stock <= 10:
+                    stock_status = "low_stock"
+                else:
+                    stock_status = "in_stock"
 
-            results.append({
-                "sku": sku,
-                "product": variant.product.name,
-                "old_stock": old_stock,
-                "new_stock": new_stock,
-                "stock_status": stock_status,
-            })
+                results.append({
+                    "sku": sku,
+                    "product": variant.product.name,
+                    "old_stock": old_stock,
+                    "new_stock": new_stock,
+                    "stock_status": stock_status,
+                })
 
         return Response({
             "message": f"Bulk update complete. {updated_count} variant(s) updated.",
@@ -1443,7 +1517,6 @@ class VendorLowStockAlertView(APIView):
         tags=["Vendor — Inventory"]
     )
     def get(self, request):
-        from .serializers import ProductInventorySerializer
         vendor = request.user.vendor_profile
 
         try:
@@ -1489,8 +1562,13 @@ class VendorLowStockAlertView(APIView):
             "low_stock": ProductInventorySerializer(
                 low_stock, many=True, context={'request': request}
             ).data,
-        }, status=status.HTTP_200_OK)    
-    
+        }, status=status.HTTP_200_OK)
+
+
+# ─────────────────────────────────────────────────────────────
+# Vendor Dashboard
+# ─────────────────────────────────────────────────────────────
+
 class VendorDashboardView(APIView):
     """
     GET /api/vendors/dashboard/
@@ -1502,7 +1580,7 @@ class VendorDashboardView(APIView):
         summary="Vendor dashboard summary",
         description="""
         Returns everything a vendor needs on their dashboard:
-        - Overall revenue, payout and commission stats
+        - Overall revenue, payout and commission stats (cancelled and returned orders excluded)
         - This month's performance
         - Inventory alerts (low stock, out of stock)
         - Order status breakdown
@@ -1526,25 +1604,17 @@ class VendorDashboardView(APIView):
         tags=["Vendor — Dashboard"]
     )
     def get(self, request):
-        from django.db.models import (
-            Sum, Count, F, DecimalField as DField
-        )
-        from django.db.models.functions import TruncDate
-        from django.utils import timezone
-        from datetime import timedelta
-        from decimal import Decimal
-        from orders.models import Order, OrderItem
-        from products.models import Product
-
         vendor = request.user.vendor_profile
-        now = timezone.now()
+
+        # Local (Asia/Kolkata) time, so the chart days line up with TruncDate and "this month" starts at local midnight
+        now = timezone.localtime()
         this_month_start = now.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
         seven_days_ago = now - timedelta(days=7)
         thirty_days_ago = now - timedelta(days=30)
 
-        # ── All vendor order items ─────────────────────────────
+        # ── All vendor order items (cancelled / returned orders don't count as revenue) ──
         all_items = OrderItem.objects.filter(vendor=vendor).exclude(
             order__status__in=['cancelled', 'returned']
         )
@@ -1775,4 +1845,4 @@ class VendorDashboardView(APIView):
             "best_selling_products": best_selling_products,
             "recent_orders": recent_orders,
 
-        }, status=status.HTTP_200_OK)    
+        }, status=status.HTTP_200_OK)

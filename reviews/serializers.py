@@ -9,26 +9,43 @@ class ReviewUserSerializer(serializers.Serializer):
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    user = ReviewUserSerializer(read_only=True)
+    reviewer_name = serializers.SerializerMethodField()
     helpful_count = serializers.SerializerMethodField()
     marked_helpful_by_me = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_slug = serializers.CharField(source='product.slug', read_only=True)
 
     class Meta:
         model = Review
         fields = [
-            'id', 'user', 'rating', 'title', 'body',
-            'is_verified_purchase', 'helpful_count',
-            'marked_helpful_by_me', 'created_at', 'updated_at'
+            'id', 'reviewer_name', 'is_mine', 'product_name', 'product_slug',
+            'rating', 'title', 'body', 'is_verified_purchase',
+            'helpful_count', 'marked_helpful_by_me', 'created_at', 'updated_at'
         ]
 
-    def get_helpful_count(self, obj):
-        return obj.helpful_votes.count()
+    def get_reviewer_name(self, obj) -> str:
+        user = obj.user
+        first = (user.first_name or '').strip()
+        last = (user.last_name or '').strip()
+        if first:
+            return f"{first} {last[0]}." if last else first
+        # no name saved: show only the start of the email, never the whole address
+        contact = user.email or user.phone_number or ''
+        return f"{contact[:2]}***" if contact else 'Customer'
 
-    def get_marked_helpful_by_me(self, obj):
+    def get_helpful_count(self, obj) -> int:
+        return len(obj.helpful_votes.all())  # uses the prefetched votes, no extra query
+
+    def get_marked_helpful_by_me(self, obj) -> bool:
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return obj.helpful_votes.filter(user=request.user).exists()
+            return any(v.user_id == request.user.id for v in obj.helpful_votes.all())
         return False
+
+    def get_is_mine(self, obj) -> bool:
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and obj.user_id == request.user.id)
 
 
 class CreateReviewSerializer(serializers.ModelSerializer):
@@ -49,7 +66,8 @@ class CreateReviewSerializer(serializers.ModelSerializer):
         return value
 
 
-class UpdateReviewSerializer(serializers.ModelSerializer):
+class UpdateReviewSerializer(CreateReviewSerializer):
+    """Same rules as creating; the view passes partial=True, so every field is optional."""
     class Meta:
         model = Review
         fields = ['rating', 'title', 'body']

@@ -145,6 +145,8 @@ class CreateOrderView(APIView):
                 order=order, status="pending", note="Order placed"
             )
 
+            
+
             # COD — confirm immediately
             if payment_method == "cod":
                 order.status = "confirmed"
@@ -516,6 +518,13 @@ class AdminUpdateOrderStatusView(APIView):
         order.status = new_status
         order.save()
         OrderStatusHistory.objects.create(order=order, status=new_status, note=note)
+
+        # keep the items in step with the order, so vendors and the review check see the same thing
+        if new_status == 'shipped':
+            order.items.filter(status='pending').update(status='shipped')
+        elif new_status == 'delivered':
+            order.items.exclude(status='delivered').update(status='delivered')
+            order.settle_cod_payment()
 
         return Response(
             {

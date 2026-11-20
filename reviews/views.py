@@ -13,6 +13,7 @@ from .serializers import (
 )
 from .utils import has_purchased_product
 from products.models import Product
+from django.db.models import Avg, Count, Q
 
 
 class ProductReviewListView(APIView):
@@ -56,58 +57,66 @@ class ProductReviewListView(APIView):
         try:
             product = Product.objects.get(slug=product_slug, is_active=True)
         except Product.DoesNotExist:
-            return Response(
-                {"error": "Product not found."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
 
         reviews = Review.objects.filter(
             product=product, is_active=True
-        ).select_related('user').prefetch_related('helpful_votes')
+        ).select_related('user', 'product').prefetch_related('helpful_votes')
 
-        # Filter by star rating
+        # ?rating=abc used to crash with a 500; now it is ignored
         rating_filter = request.query_params.get('rating')
-        if rating_filter:
-            reviews = reviews.filter(rating=rating_filter)
+        if rating_filter and rating_filter.isdigit() and 1 <= int(rating_filter) <= 5:
+            reviews = reviews.filter(rating=int(rating_filter))
 
-        # Ordering
         ordering = request.query_params.get('ordering', 'newest')
-        ordering_map = {
-            'newest': '-created_at',
-            'highest_rated': '-rating',
-            'lowest_rated': 'rating',
-            'most_helpful': '-helpful_votes__count',
-        }
         if ordering == 'most_helpful':
-            reviews = reviews.annotate(
-                helpful_count=Count('helpful_votes')
-            ).order_by('-helpful_count')
+            reviews = reviews.annotate(helpful_total=Count('helpful_votes')).order_by('-helpful_total', '-id')
         else:
-            reviews = reviews.order_by(ordering_map.get(ordering, '-created_at'))
+            ordering_map = {'newest': '-created_at', 'highest_rated': '-rating', 'lowest_rated': 'rating'}
+            reviews = reviews.order_by(ordering_map.get(ordering, '-created_at'), '-id')
 
-        # Rating summary
-        all_reviews = Review.objects.filter(product=product, is_active=True)
-        total = all_reviews.count()
-        avg = all_reviews.aggregate(Avg('rating'))['rating__avg'] or 0
-
+        # one query for the whole summary
+        stats = Review.objects.filter(product=product, is_active=True).aggregate(
+            total=Count('id'), average=Avg('rating'),
+            five=Count('id', filter=Q(rating=5)), four=Count('id', filter=Q(rating=4)),
+            three=Count('id', filter=Q(rating=3)), two=Count('id', filter=Q(rating=2)),
+            one=Count('id', filter=Q(rating=1)),
+        )
         summary = {
-            'total_reviews': total,
-            'average_rating': round(avg, 1),
-            'five_star': all_reviews.filter(rating=5).count(),
-            'four_star': all_reviews.filter(rating=4).count(),
-            'three_star': all_reviews.filter(rating=3).count(),
-            'two_star': all_reviews.filter(rating=2).count(),
-            'one_star': all_reviews.filter(rating=1).count(),
+            'total_reviews': stats['total'],
+            'average_rating': round(stats['average'] or 0, 1),
+            'five_star': stats['five'], 'four_star': stats['four'], 'three_star': stats['three'],
+            'two_star': stats['two'], 'one_star': stats['one'],
         }
 
-        serializer = ReviewSerializer(
-            reviews, many=True, context={'request': request}
-        )
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+            page_size = min(max(int(request.query_params.get('page_size', 10)), 1), 50)
+        except ValueError:
+            page, page_size = 1, 10
+        total = reviews.count()
+        start = (page - 1) * page_size
+
+        # can this user write a review? bought it, received it, and has not reviewed it yet
+        can_review = False
+        if request.user.is_authenticated:
+            can_review = (
+                not Review.objects.filter(user=request.user, product=product).exists()
+                and has_purchased_product(request.user, product)
+            )
+
+        serializer = ReviewSerializer(reviews[start:start + page_size], many=True, context={'request': request})
         return Response({
             'summary': summary,
-            'reviews': serializer.data
+            'reviews': serializer.data,
+            'can_review': can_review,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size,
+            'has_next': start + page_size < total,
         }, status=status.HTTP_200_OK)
 
+    
     @extend_schema(
         summary="Submit a review",
         description="""
@@ -237,9 +246,7 @@ class ReviewDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Soft delete
-        review.is_active = False
-        review.save()
+        review.delete()  # Permanently delete the user's own review
         return Response(
             {"message": "Review deleted successfully."},
             status=status.HTTP_200_OK

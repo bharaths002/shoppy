@@ -102,7 +102,7 @@ class Product(models.Model):
     @property
     def is_in_stock(self):
         if self.has_variants:
-            return self.variants.filter(stock__gt=0).exists()
+            return any(v.is_active and v.stock > 0 for v in self.variants.all())
         return self.stock > 0
     
     @property
@@ -176,9 +176,11 @@ class ProductVariant(models.Model):
 
     @property
     def effective_price(self):
-        base = self.price or self.product.price
-        discounted = self.discount_price or self.product.discount_price
-        return discounted if discounted else base
+        if self.price is not None:
+            # the variant sets its own price: only its own discount applies
+            return self.discount_price or self.price
+        # no override: follow the parent product
+        return self.discount_price or self.product.discount_price or self.product.price
 
     def __str__(self):
         attrs = self.attributes.select_related('attribute_type').all()

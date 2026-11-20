@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Product, ProductImage, ProductVariant, VariantAttribute, Category, Brand, AttributeType
-
+from decimal import Decimal
+from django.db import transaction
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -101,9 +102,21 @@ class ProductCreateSerializer(serializers.ModelSerializer):
             'has_variants', 'is_active', 'is_featured'
         ]
 
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+
+    def validate_discount_price(self, value):
+        # null clears the discount, anything else must be positive
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Discount price must be greater than zero.")
+        return value
+
     def validate(self, data):
-        price = data.get('price')
-        discount_price = data.get('discount_price')
+        # fall back to the stored values so a PATCH with only one of the two prices is still checked
+        price = data.get('price', getattr(self.instance, 'price', None))
+        discount_price = data.get('discount_price', getattr(self.instance, 'discount_price', None))
         if discount_price and price and discount_price >= price:
             raise serializers.ValidationError(
                 {"discount_price": "Discount price must be less than original price."}
@@ -123,9 +136,13 @@ class ProductCreateSerializer(serializers.ModelSerializer):
 
 # ✅ New — for creating and updating variants
 class ProductVariantCreateSerializer(serializers.Serializer):
-    price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
-    discount_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
-    stock = serializers.IntegerField(default=0)
+    price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True, min_value=Decimal('0.01')
+    )
+    discount_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True, min_value=Decimal('0.01')
+    )
+    stock = serializers.IntegerField(default=0, min_value=0)
     is_active = serializers.BooleanField(default=True)
     # attributes: [{"attribute_type_id": 1, "value": "128GB"}, ...]
     attributes = serializers.ListField(
@@ -133,27 +150,36 @@ class ProductVariantCreateSerializer(serializers.Serializer):
     )
 
     def validate(self, data):
-        price = data.get('price')
-        discount_price = data.get('discount_price')
-        if discount_price and price and discount_price >= price:
+        product = self.context.get('product') or getattr(self.instance, 'product', None)
+        price = data.get('price', getattr(self.instance, 'price', None))
+        discount_price = data.get('discount_price', getattr(self.instance, 'discount_price', None))
+        base = price or (product.price if product else None)
+        if discount_price and base and discount_price >= base:
             raise serializers.ValidationError(
-                {"discount_price": "Discount price must be less than original price."}
+                {"discount_price": "Discount price must be less than the price."}
             )
         return data
 
     def create(self, validated_data):
         attributes_data = validated_data.pop('attributes', [])
         product = self.context['product']
-        variant = ProductVariant.objects.create(product=product, **validated_data)
 
-        for attr in attributes_data:
-            attr_type = AttributeType.objects.filter(id=attr.get('attribute_type_id')).first()
-            if attr_type:
-                VariantAttribute.objects.create(
-                    variant=variant,
-                    attribute_type=attr_type,
-                    value=attr.get('value', '')
-                )
+        with transaction.atomic():
+            # adding a variant means the product has variants, otherwise the cart would ignore them
+            if not product.has_variants:
+                product.has_variants = True
+                product.save(update_fields=['has_variants'])
+
+            variant = ProductVariant.objects.create(product=product, **validated_data)
+
+            for attr in attributes_data:
+                attr_type = AttributeType.objects.filter(id=attr.get('attribute_type_id')).first()
+                if attr_type:
+                    VariantAttribute.objects.create(
+                        variant=variant,
+                        attribute_type=attr_type,
+                        value=attr.get('value', '')
+                    )
         return variant
 
     def update(self, instance, validated_data):
